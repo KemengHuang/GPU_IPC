@@ -6563,14 +6563,14 @@ float GIPC::computeGradientAndHessian(device_TetraData& TetMesh) {
     calKineticGradient(TetMesh.vertexes, TetMesh.xTilta, TetMesh.fb, TetMesh.masses, vertexNum);
     CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, 5 * sizeof(uint32_t)));
     //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    calBarrierHessian();
+    //calBarrierHessian();
     //CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    //calBarrierGradientAndHessian(TetMesh.fb, Kappa);
+    calBarrierGradientAndHessian(TetMesh.fb, Kappa);
 
     float time00 = 0;
 
-    calBarrierGradient(TetMesh.fb, Kappa);
+    //calBarrierGradient(TetMesh.fb, Kappa);
 #ifdef USE_FRICTION
     calFrictionGradient(TetMesh.fb, TetMesh);
     calFrictionHessian(TetMesh);
