@@ -250,12 +250,6 @@ __GEIGEN__::Matrix3x2d __computePEPF_BaraffWitkinStretch_double(const __GEIGEN__
         vcoeff *= 1e-2;
     }
 
-    //if (I5u > 1.01) {
-    //    ucoeff *= 1e1;
-    //}
-    //if (I5v > 1.01) {
-    //    vcoeff *= 1e1;
-    //}
 
     __GEIGEN__::Matrix2x2d uu = __GEIGEN__::__v2_vec2_toMat2x2(u, u);
     __GEIGEN__::Matrix2x2d vv = __GEIGEN__::__v2_vec2_toMat2x2(v, v);
@@ -387,22 +381,8 @@ __GEIGEN__::Matrix6x6d __project_BaraffWitkinStretch_H(const __GEIGEN__::Matrix3
     v.x = 0; v.y = 1;
     double I5u = __GEIGEN__::__squaredNorm(__M3x2_v2_multiply(F, u));
     double I5v = __GEIGEN__::__squaredNorm(__M3x2_v2_multiply(F, v));
-    double ucoeff = 1.0 - 1 / sqrt(I5u);
-    double vcoeff = 1.0 - 1 / sqrt(I5v);
 
-    if (I5u < 1) {
-        ucoeff *= 1e-2;
-    }
-    if (I5v < 1) {
-        vcoeff *= 1e-2;
-    }
 
-    //if (I5u > 1.01) {
-    //    ucoeff *= 1e1;
-    //}
-    //if (I5v > 1.01) {
-    //    vcoeff *= 1e1;
-    //}
 
     double invSqrtI5u = 1.0 / sqrt(I5u);
     double invSqrtI5v = 1.0 / sqrt(I5v);
@@ -415,6 +395,15 @@ __GEIGEN__::Matrix6x6d __project_BaraffWitkinStretch_H(const __GEIGEN__::Matrix3
     double uCoeff = (1.0 - invSqrtI5u >= 0.0) ? invSqrtI5u : 1.0;
     double vCoeff = (1.0 - invSqrtI5v >= 0.0) ? invSqrtI5v : 1.0;
     uCoeff *= 2; vCoeff *= 2;
+
+    if (I5u < 1) {
+        uCoeff *= 1e-2;
+    }
+    if (I5v < 1) {
+        vCoeff *= 1e-2;
+    }
+
+
     double3 fu, fv;
     fu.x = F.m[0][0]; fu.y = F.m[1][0]; fu.z = F.m[2][0];
     fv.x = F.m[0][1]; fv.y = F.m[1][1]; fv.z = F.m[2][1];
@@ -754,12 +743,6 @@ double __cal_BaraffWitkinStretch_energy(const double3* vertexes, const uint3& tr
         vcoeff *= 1e-2;
     }
 
-    //if (I5u > 1.01) {
-    //    ucoeff *= 1e1;
-    //}
-    //if (I5v > 1.01) {
-    //    vcoeff *= 1e1;
-    //}
 
     double I6 = __GEIGEN__::__v_vec_dot(__M3x2_v2_multiply(F, u), __M3x2_v2_multiply(F, v));
     return area * (stretchStiff * (ucoeff * pow(sqrt(I5u) - 1, 2) + vcoeff * pow(sqrt(I5v) - 1, 2)) + shearhStiff * I6 * I6);
