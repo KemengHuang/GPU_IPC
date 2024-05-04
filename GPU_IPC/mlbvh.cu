@@ -556,7 +556,7 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
     int dtype = _dType_EE(v0, v1, v2, v3);
     int add_e = -1;
     double d = 100.0;
-    bool smooth = false;
+    bool smooth = true;
     switch (dtype) {
     case 0: {
         _d_PP(v0, v2, d);

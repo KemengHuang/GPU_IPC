@@ -11,8 +11,8 @@
 #define _EIGEN_DATA_H_
 
 using Precision_T = double;
-using Precision_TM = double;
-using Precision_T3 = double3;
+using Precision_TM = float;
+using Precision_T3 = float3;
 
 namespace __GEIGEN__ {
 
@@ -79,6 +79,17 @@ namespace __GEIGEN__ {
 	struct Matrix96x96T {
 		Precision_T m[96][96];
 	};
+
+
+	struct Matrix3x3f
+    {
+        Precision_TM m[3][3];
+    };
+
+    struct MasMatrixSymf
+    {
+        Matrix3x3f M[32 * (32 + 1) / 2];
+    };
 
 	struct Matrix96x96MT {
 		Precision_TM m[96][96];

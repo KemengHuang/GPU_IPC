@@ -54,8 +54,8 @@ class MASPreconditioner {
 	unsigned int* d_nextPrefixSum;
 
 
-	__GEIGEN__::Matrix96x96MT* d_Mat96;
-	__GEIGEN__::Matrix96x96T* d_inverseMat96;
+	__GEIGEN__::Matrix96x96T* d_Mat96;
+    __GEIGEN__::MasMatrixSymf* d_inverseMat96;
 	Precision_T3* d_multiLevelR;
 	Precision_T3* d_multiLevelZ;
 

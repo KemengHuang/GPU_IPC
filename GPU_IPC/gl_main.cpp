@@ -740,7 +740,7 @@ void initScene1() {
 	}
 
 
-	if (false) {
+	if (true) {
 		if (ipc.animation) {
 			ipc.sortMesh(d_tetMesh, bodyVertOffset);
 		}
