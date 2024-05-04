@@ -456,8 +456,12 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
             cPid    = vertCid / 32;
-            atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
-                      Hval);
+            if(vertCid / 32 == vertRid / 32)
+            {
+
+                atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+                          Hval);
+            }
         }
     }
     else if(numbers4 <= idx && idx < numbers3 + numbers4)
@@ -505,8 +509,12 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
             cPid    = vertCid / 32;
-            atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
-                      Hval);
+            if(vertCid / 32 == vertRid / 32)
+            {
+
+                atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+                          Hval);
+            }
         }
     }
     else if(numbers3 + numbers4 <= idx && idx < numbers3 + numbers4 + numbers2)
@@ -555,8 +563,12 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
             cPid    = vertCid / 32;
-            atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
-                      Hval);
+            if(vertCid / 32 == vertRid / 32)
+            {
+
+                atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+                          Hval);
+            }
         }
     }
     else
@@ -647,12 +659,6 @@ __global__ void __inverse2_P96x96(__GEIGEN__::Matrix96x96T*  PMas,
 
     __syncthreads();
     __threadfence();
-    //if(i % 3 < 2)
-    //    PMas[matId].m[i + 1][i] = PMas[matId].m[i][i + 1];
-    //else
-    //    PMas[matId].m[i][i - 2] = PMas[matId].m[i - 2][i];
-    //__syncthreads();
-    //__threadfence();
 
     int         j = 0;
     Precision_T rt;
@@ -1687,15 +1693,15 @@ int MASPreconditioner::ReorderRealtime(int cpNum)
     //}
 }
 
-#include <fstream>
+//#include <fstream>
 
 void MASPreconditioner::PrepareHessian(const BHessian& BH, const double* masses)
 {
-    cudaEvent_t start, end0, end1, end2;
-    cudaEventCreate(&start);
-    cudaEventCreate(&end0);
-    cudaEventCreate(&end1);
-    cudaEventCreate(&end2);
+    //cudaEvent_t start, end0, end1, end2;
+    //cudaEventCreate(&start);
+    //cudaEventCreate(&end0);
+    //cudaEventCreate(&end1);
+    //cudaEventCreate(&end2);
 
 
     int number = totalNodes;
@@ -1704,10 +1710,10 @@ void MASPreconditioner::PrepareHessian(const BHessian& BH, const double* masses)
     int numBlocks = (number + blockSize - 1) / blockSize;
 
     //cout << totalSize / 32 << endl;
-    cudaEventRecord(start);
+    //cudaEventRecord(start);
     __setMassMat_P96<<<numBlocks, blockSize>>>(masses, d_goingNext, d_Mat96, levelnum, totalNodes);
 
-    cudaEventRecord(end0);
+    //cudaEventRecord(end0);
 
 
     number = BH.DNum[3] * 144 + BH.DNum[2] * 81 + BH.DNum[1] * 36 + BH.DNum[0] * 9;
@@ -1729,28 +1735,28 @@ void MASPreconditioner::PrepareHessian(const BHessian& BH, const double* masses)
                                               d_goingNext,
                                               levelnum);
 
-    cudaEventRecord(end1);
+    //cudaEventRecord(end1);
 
     blockSize = 96;
     number    = totalNumberClusters * 3;
     numBlocks = (number + blockSize - 1) / blockSize;
     __inverse2_P96x96<<<numBlocks, blockSize>>>(d_Mat96, d_inverseMat96, number);
 
-    cudaEventRecord(end2);
+    //cudaEventRecord(end2);
 
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    float time0, time1, time2, time3, time4;
-    cudaEventElapsedTime(&time0, start, end0);
-    cudaEventElapsedTime(&time1, end0, end1);
-    cudaEventElapsedTime(&time2, end1, end2);
+    //float time0, time1, time2, time3, time4;
+    //cudaEventElapsedTime(&time0, start, end0);
+    //cudaEventElapsedTime(&time1, end0, end1);
+    //cudaEventElapsedTime(&time2, end1, end2);
 
-    printf("\n\ntime0 = %f,  time1 = %f,  time1 = %f\n\n", time0, time1, time2);
+    //printf("\n\ntime0 = %f,  time1 = %f,  time1 = %f\n\n", time0, time1, time2);
 
-    (cudaEventDestroy(start));
-    (cudaEventDestroy(end0));
-    (cudaEventDestroy(end1));
-    (cudaEventDestroy(end2));
+    //(cudaEventDestroy(start));
+    //(cudaEventDestroy(end0));
+    //(cudaEventDestroy(end1));
+    //(cudaEventDestroy(end2));
 }
 
 void MASPreconditioner::BuildMultiLevelR(const double3* R)
@@ -1792,15 +1798,6 @@ void MASPreconditioner::CollectFinalZ(double3* Z)
 
     __collectFinalZ<<<numBlocks, blockSize>>>(Z, d_multiLevelZ, d_coarseTable, levelnum, number);
 
-    //vector<int4> h_r(totalNodes);
-    //CUDA_SAFE_CALL(cudaMemcpy(h_r.data(), d_coarseTable, totalNodes * sizeof(int4), cudaMemcpyDeviceToHost));
-
-    //for (int i = 0; i < totalNodes; i++) {
-
-    //  cout << h_r[i].x << " " << h_r[i].y << " " << h_r[i].z<<"  "<<h_r[i].w << endl;
-    //  //cout << h_fineCMsk[i] << endl;
-    //}
-    //exit(0);
 }
 
 void MASPreconditioner::setPreconditioner(const BHessian& BH, const double* masses, int cpNum)
@@ -1838,33 +1835,33 @@ void MASPreconditioner::preconditioning(const double3* R, double3* Z)
                               (totalNumberClusters - totalNodes) * sizeof(Precision_T3)));
     CUDA_SAFE_CALL(cudaMemset(d_multiLevelZ, 0, (totalNumberClusters) * sizeof(Precision_T3)));
 
-    cudaEvent_t start, end0, end1, end2;
-    cudaEventCreate(&start);
-    cudaEventCreate(&end0);
-    cudaEventCreate(&end1);
-    cudaEventCreate(&end2);
+    //cudaEvent_t start, end0, end1, end2;
+    //cudaEventCreate(&start);
+    //cudaEventCreate(&end0);
+    //cudaEventCreate(&end1);
+    //cudaEventCreate(&end2);
 
-    cudaEventRecord(start);
+    //cudaEventRecord(start);
     BuildMultiLevelR(R);
-    cudaEventRecord(end0);
+    //cudaEventRecord(end0);
     SchwarzLocalXSym();
-    cudaEventRecord(end1);
+    //cudaEventRecord(end1);
     CollectFinalZ(Z);
-    cudaEventRecord(end2);
+    //cudaEventRecord(end2);
 
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    float time0, time1, time2, time3, time4;
-    cudaEventElapsedTime(&time0, start, end0);
-    cudaEventElapsedTime(&time1, end0, end1);
-    cudaEventElapsedTime(&time2, end1, end2);
+    //float time0, time1, time2, time3, time4;
+    //cudaEventElapsedTime(&time0, start, end0);
+    //cudaEventElapsedTime(&time1, end0, end1);
+    //cudaEventElapsedTime(&time2, end1, end2);
 
     //printf("\n\npreconditioning  time0 = %f,  time1 = %f,  time1 = %f\n\n", time0, time1, time2);
 
-    (cudaEventDestroy(start));
-    (cudaEventDestroy(end0));
-    (cudaEventDestroy(end1));
-    (cudaEventDestroy(end2));
+    //(cudaEventDestroy(start));
+    //(cudaEventDestroy(end0));
+    //(cudaEventDestroy(end1));
+    //(cudaEventDestroy(end2));
 }
 
 void MASPreconditioner::initPreconditioner(int vertNum, int totalNeighborNum, int4* m_collisonPairs)
@@ -1916,7 +1913,6 @@ void MASPreconditioner::FreeMAS()
     CUDA_SAFE_CALL(cudaFree(d_nextPrefixSum));
     CUDA_SAFE_CALL(cudaFree(d_prefixSumOriginal));
     CUDA_SAFE_CALL(cudaFree(d_fineConnectMask));
-    CUDA_SAFE_CALL(cudaFree(d_denseLevel));
     CUDA_SAFE_CALL(cudaFree(d_nextConnectMask));
     CUDA_SAFE_CALL(cudaFree(d_neighborList));
     CUDA_SAFE_CALL(cudaFree(d_neighborListInit));

@@ -7006,7 +7006,7 @@ int GIPC::solve_subIP(device_TetraData& TetMesh, double& time0, double& time1, d
         time3 += time33;
         time4 += time44;
         ////*cflTime = ptime;
-        printf("time0 = %f,  time1 = %f,  time2 = %f,  time3 = %f,  time4 = %f\n", time00, time11, time22, time33, time44);
+        //printf("time0 = %f,  time1 = %f,  time2 = %f,  time3 = %f,  time4 = %f\n", time00, time11, time22, time33, time44);
         (cudaEventDestroy(start));
         (cudaEventDestroy(end0));
         (cudaEventDestroy(end1));

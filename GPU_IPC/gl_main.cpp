@@ -660,9 +660,9 @@ void initScene1() {
 	auto assets_dir = std::string{ gipc::assets_dir() };
 
     tetMesh.load_tetrahedraMesh(
-        assets_dir + "tetMesh/bunny.msh", 0.5, make_double3(0, 0.4, 0));
+        assets_dir + "tetMesh/bunny2.msh", 0.2, make_double3(0, 0.65, 0));
     tetMesh.load_tetrahedraMesh(
-        assets_dir + "tetMesh/bunny.msh", 0.5, make_double3(0, -0.4, 0));
+        assets_dir + "tetMesh/bunny2.msh", 0.2, make_double3(0, -0, 0));
 
 
 	tetMesh.getSurface();
@@ -720,7 +720,7 @@ void initScene1() {
 	printf("maxCollisionPairsNum_CCD: %d      maxCollisionPairsNum: %d\n", ipc.MAX_CCD_COLLITION_PAIRS_NUM, ipc.MAX_COLLITION_PAIRS_NUM);
 
 	//ipc.USE_MAS = false;
-	ipc.pcg_data.P_type = 0;
+	ipc.pcg_data.P_type = 1;
 	ipc.MALLOC_DEVICE_MEM();
 
 	CUDA_SAFE_CALL(cudaMemcpy(ipc._faces, tetMesh.surface.data(), ipc.surface_Num * sizeof(uint3), cudaMemcpyHostToDevice));

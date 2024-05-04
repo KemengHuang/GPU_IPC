@@ -1443,7 +1443,7 @@ int MASPCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& B
     //printf("cg counts = %d\n", cgCounts);
     if (cgCounts == 0) {
         printf("indefinite exit\n");
-        exit(0);
+        //exit(0);
     }
     return cgCounts;
 }
@@ -1483,7 +1483,7 @@ int PCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, 
     }
     _mvDir = pcg_data->dx;
     //CUDA_SAFE_CALL(cudaMemcpy(pcg_data->z, _mvDir, vertexNum * sizeof(double3), cudaMemcpyDeviceToDevice));
-    //printf("cg counts = %d\n", cgCounts);
+    printf("cg counts = %d\n", cgCounts);
     if (cgCounts == 0) {
         printf("indefinite exit\n");
         exit(0);
@@ -1549,7 +1549,7 @@ void BHessian::updateDNum(const int& tri_Num, const int& tet_number, const uint3
 
 void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number, const int& surfvert_number, const int& surface_number, const int& surfEdge_number, const int& triangle_num, const int& tri_Edge_number) {
 
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H12x12, (2 * (tet_number + surfvert_number + surfEdge_number) + tri_Edge_number) * sizeof(__GEIGEN__::Matrix12x12d)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&H12x12, (2 * (surfvert_number + surfEdge_number) + tet_number + tri_Edge_number) * sizeof(__GEIGEN__::Matrix12x12d)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&H9x9, (2 * (surfEdge_number + surfvert_number) + triangle_num) * sizeof(__GEIGEN__::Matrix9x9d)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&H6x6, 2 * (surfvert_number + surfEdge_number) * sizeof(__GEIGEN__::Matrix6x6d)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&H3x3, 2 * surfvert_number * sizeof(__GEIGEN__::Matrix3x3d)));
@@ -1563,7 +1563,7 @@ void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number, const int& surfvert_nu
     CUDA_SAFE_CALL(cudaMalloc((void**)&D1Index, 2 * surfvert_number * sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&D2Index, 2 * (surfvert_number + surfEdge_number) * sizeof(uint2)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&D3Index, (2 * (surfEdge_number + surfvert_number)+ triangle_num) * sizeof(uint3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D4Index, (2 * (tet_number + surfvert_number + surfEdge_number) + tri_Edge_number) * sizeof(uint4)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&D4Index, (2 * (surfvert_number + surfEdge_number) + tet_number + tri_Edge_number) * sizeof(uint4)));
 }
 
 void BHessian::FREE_DEVICE_MEM() {
@@ -1577,10 +1577,3 @@ void BHessian::FREE_DEVICE_MEM() {
     CUDA_SAFE_CALL(cudaFree(D4Index));
 }
 
-
-#include <thrust/device_vector.h>
-
-void thrust_test() {
-    thrust::device_vector<int> D(10);
-    D.resize(100);
-}
