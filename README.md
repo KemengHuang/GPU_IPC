@@ -13,7 +13,7 @@ Source code contributor: [Kemeng Huang](https://kemenghuang.github.io)
 **Note: this software is released under the MPLv2.0 license. For commercial use, please email the authors for negotiation.**
 
 ## video 1
-[![Watch the video](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/video1.png)](https://www.youtube.com/watch?v=zJ0_zsU47h4&t=4s)
+[![Watch the video](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/video1.png)](https://youtu.be/5rwp6AiHtrw)
 
 ## video 2
 [![Watch the video](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/video2.png)](https://www.youtube.com/watch?v=GE39Ar1uH9g)
@@ -76,6 +76,14 @@ We use [vcpkg](https://github.com/microsoft/vcpkg) to manage the libraries we ne
 ```shell
 vcpkg install eigen3 freeglut glew
 ```
+
+Settings
+================
+The GPU memory buffer might be requried mannually setting in the source code according to the exact simulation scene.
+## collision buffer
+https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/collision.JPG
+## hessian buffer
+https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/hessian.JPG
 
 EXTERNAL CREDITS
 ================
