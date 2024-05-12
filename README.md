@@ -81,9 +81,9 @@ Settings
 ================
 The GPU memory buffer might be requried mannually setting in the source code according to the exact simulation scene.
 ## collision buffer
-https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/collision.JPG
+![alt text](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/collision.JPG)
 ## hessian buffer
-https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/hessian.JPG
+![alt text](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/hessian.JPG)
 
 EXTERNAL CREDITS
 ================
