@@ -15,8 +15,6 @@ Source code contributor: [Kemeng Huang](https://kemenghuang.github.io)
 ## video 1
 [![Watch the video](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/video1.png)](https://youtu.be/5rwp6AiHtrw)
 
-## video 2
-[![Watch the video](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/video2.png)](https://www.youtube.com/watch?v=GE39Ar1uH9g)
 
 ## BibTex 
 
@@ -79,7 +77,7 @@ vcpkg install eigen3 freeglut glew
 
 Settings
 ================
-The GPU memory buffer might be requried mannually setting in the source code according to the exact simulation scene.
+It may be necessary to manually adjust the GPU memory buffer in the source code to match the specific requirements of the simulation scene.
 ## collision buffer
 ![alt text](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/collision.JPG)
 ## hessian buffer
