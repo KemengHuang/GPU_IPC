@@ -1277,7 +1277,7 @@ double My_PCG_General_v_v_Reduction_Algorithm(device_TetraData* mesh, PCG_Data* 
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
     unsigned int sharedMsize = sizeof(double) * (threadNum >> 5);
-    PCG_vdv_Reduction << <blockNum, threadNum >> > (pcg_data->squeue, A, B, numbers);
+    PCG_vdv_Reduction<<<blockNum, threadNum, sharedMsize>>>(pcg_data->squeue, A, B, numbers);
 
 
     numbers = blockNum;
@@ -1441,10 +1441,10 @@ int MASPCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& B
     _mvDir = pcg_data->dx;
     //CUDA_SAFE_CALL(cudaMemcpy(pcg_data->z, _mvDir, vertexNum * sizeof(double3), cudaMemcpyDeviceToDevice));
     //printf("cg counts = %d\n", cgCounts);
-    if (cgCounts == 0) {
-        printf("indefinite exit\n");
-        //exit(0);
-    }
+    //if (cgCounts == 0) {
+    //    printf("indefinite exit\n");
+    //    //exit(0);
+    //}
     return cgCounts;
 }
 
@@ -1483,11 +1483,11 @@ int PCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, 
     }
     _mvDir = pcg_data->dx;
     //CUDA_SAFE_CALL(cudaMemcpy(pcg_data->z, _mvDir, vertexNum * sizeof(double3), cudaMemcpyDeviceToDevice));
-    printf("cg counts = %d\n", cgCounts);
-    if (cgCounts == 0) {
-        printf("indefinite exit\n");
-        exit(0);
-    }
+    //printf("cg counts = %d\n", cgCounts);
+    //if (cgCounts == 0) {
+    //    printf("indefinite exit\n");
+    //    exit(0);
+    //}
     return cgCounts;
 }
 

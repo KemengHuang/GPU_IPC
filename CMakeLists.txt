@@ -4,16 +4,23 @@ cmake_minimum_required(VERSION 3.18)
 
 # project meta
 # ============
-if(UNIX)
-    if(NOT CMAKE_BUILD_TYPE)
-        set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose Release or Debug")
-    endif()
-    set(CMAKE_CXX_FLAGS "-O3")
-    # to improve: no hard code
-    set(CMAKE_CUDA_COMPILER "/usr/local/cuda11.8/bin")
+# settings
+set(CUDA_ARCHITECTURES 86)
+set(CMAKE_BUILD_TYPE "Release")
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose Release or Debug")
 endif()
 
+# project
 project(gpu_ipc LANGUAGES CXX CUDA)
+find_package(CUDAToolkit REQUIRED COMPONENTS cufft REQUIRED)
+
+if(UNIX)
+    if(CMAKE_BUILD_TYPE EQUAL "Release")
+        set(CMAKE_CXX_FLAGS "-O3")
+    endif()
+endif()
+
 
 # find packages
 find_package(Eigen3 REQUIRED)
@@ -23,6 +30,7 @@ find_package(OpenGL REQUIRED)
 
 
 add_executable(gipc)
+target_compile_features(gipc PRIVATE cuda_std_17)
 
 target_include_directories(gipc PRIVATE "GPU_IPC/")
 
@@ -43,6 +51,7 @@ target_link_libraries(gipc PRIVATE cusparse cublas cusolver cudart_static)
 target_link_libraries(gipc PRIVATE GLUT::GLUT GLEW::GLEW OpenGL::GLU Eigen3::Eigen)
 
 target_compile_features(gipc PRIVATE cxx_std_17 cuda_std_17)
+target_link_libraries(gipc PUBLIC CUDA::cuda_driver CUDA::cudart)
 
 set_target_properties(gipc PROPERTIES
     CUDA_EXTENSIONS ON

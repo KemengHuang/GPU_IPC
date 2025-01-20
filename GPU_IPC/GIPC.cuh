@@ -99,7 +99,7 @@ public:
 	int MAX_COLLITION_PAIRS_NUM;
 	int MAX_CCD_COLLITION_PAIRS_NUM;
 
-	double RestNHEnergy;
+	//double RestNHEnergy;
 	double animation_subRate;
 	double animation_fullRate;
 
@@ -135,7 +135,7 @@ public:
 
 	void FREE_DEVICE_MEM();
 	void initBVH(int* _btype);
-	void init(double m_meanMass, double m_meanVolumn, double3 minConer, double3 maxConer);
+	void init(double m_meanMass, double m_meanVolumn);
 
 	void buildCP();
 	void buildFullCP(const double& alpha);

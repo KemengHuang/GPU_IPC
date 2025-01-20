@@ -5738,7 +5738,7 @@ void GIPC::initBVH(int* _btype) {
     bvh_f.init(_btype, _vertexes, _faces, _surfVerts, _collisonPairs, _ccd_collisonPairs, _cpNum, _MatIndex, surface_Num, surf_vertexNum);
 }
 
-void GIPC::init(double m_meanMass, double m_meanVolumn, double3 minConer, double3 maxConer) {
+void GIPC::init(double m_meanMass, double m_meanVolumn) {
     SceneSize = bvh_f.scene;
     bboxDiagSize2 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(SceneSize.upper, SceneSize.lower));//(maxConer - minConer).squaredNorm();
     dTol = 1e-18 * bboxDiagSize2;

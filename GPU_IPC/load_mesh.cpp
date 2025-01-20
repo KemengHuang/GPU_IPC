@@ -136,12 +136,12 @@ bool tetrahedra_obj::load_triMesh(const std::string& filename, double scale, dou
 			double3 velocity = make_double3(0, 0, 0);
 			velocities.push_back(velocity);
 			
-			if (xmin > vertex.x) xmin = vertex.x;
-			if (ymin > vertex.y) ymin = vertex.y;
-			if (zmin > vertex.z) zmin = vertex.z;
-			if (xmax < vertex.x) xmax = vertex.x;
-			if (ymax < vertex.y) ymax = vertex.y;
-			if (zmax < vertex.z) zmax = vertex.z;
+			//if (xmin > vertex.x) xmin = vertex.x;
+			//if (ymin > vertex.y) ymin = vertex.y;
+			//if (zmin > vertex.z) zmin = vertex.z;
+			//if (xmax < vertex.x) xmax = vertex.x;
+			//if (ymax < vertex.y) ymax = vertex.y;
+			//if (zmax < vertex.z) zmax = vertex.z;
 		}
 		else if (key == "vn") {
 			ss >> x >> y >> z;
@@ -215,16 +215,16 @@ bool tetrahedra_obj::load_triMesh(const std::string& filename, double scale, dou
 	triangleNum = triangles.size();
 	vertexOffset += vertexNum;
 	softNum = targetIndex.size();
-	minTConer = make_double3(xmin, ymin, zmin);
-	maxTConer = make_double3(xmax, ymax, zmax);
+	//minTConer = make_double3(xmin, ymin, zmin);
+	//maxTConer = make_double3(xmax, ymax, zmax);
 
-	double boxTVolum = (maxTConer.x - minTConer.x) * (maxTConer.y - minTConer.y) * (maxTConer.z - minTConer.z);
-	double boxVolum = (maxConer.x - minConer.x) * (maxConer.y - minConer.y) * (maxConer.z - minConer.z);
+	//double boxTVolum = (maxTConer.x - minTConer.x) * (maxTConer.y - minTConer.y) * (maxTConer.z - minTConer.z);
+	//double boxVolum = (maxConer.x - minConer.x) * (maxConer.y - minConer.y) * (maxConer.z - minConer.z);
 
-	if (boxTVolum > boxVolum) {
+	/*if (boxTVolum > boxVolum) {
 		maxConer = maxTConer;
 		minConer = minTConer;
-	}
+	}*/
 
 	std::set<std::pair<int, int>> edge_set;
 	std::map<std::pair<int, int>, std::vector<int>> edge_map;
@@ -318,8 +318,8 @@ tetrahedra_obj::tetrahedra_obj() {
 	vertexNum = 0;
 	tetrahedraNum = 0;
 	triangleNum = 0;
-	minConer = make_double3(0, 0, 0);
-	maxConer = make_double3(0, 0, 0);
+	//minConer = make_double3(0, 0, 0);
+	//maxConer = make_double3(0, 0, 0);
 }
 
 bool tetrahedra_obj::load_tetrahedraMesh(const std::string& filename, double scale, double3 position_offset) {
@@ -381,15 +381,15 @@ bool tetrahedra_obj::load_tetrahedraMesh(const std::string& filename, double sca
 
 				constraints.push_back(constraint);
 
-				if (xmin > vertex.x) xmin = vertex.x;
+				/*if (xmin > vertex.x) xmin = vertex.x;
 				if (ymin > vertex.y) ymin = vertex.y;
 				if (zmin > vertex.z) zmin = vertex.z;
 				if (xmax < vertex.x) xmax = vertex.x;
 				if (ymax < vertex.y) ymax = vertex.y;
-				if (zmax < vertex.z) zmax = vertex.z;
+				if (zmax < vertex.z) zmax = vertex.z;*/
 			}
-			minTConer = make_double3(xmin, ymin, zmin);
-			maxTConer = make_double3(xmax, ymax, zmax);
+			/*minTConer = make_double3(xmin, ymin, zmin);
+			maxTConer = make_double3(xmax, ymax, zmax);*/
 		}
 
         if (line.substr(1, 8) == "Elements") {
@@ -422,13 +422,13 @@ bool tetrahedra_obj::load_tetrahedraMesh(const std::string& filename, double sca
 	}
 	ifs.close();
 
-	double boxTVolum = (maxTConer.x - minTConer.x) * (maxTConer.y - minTConer.y) * (maxTConer.z - minTConer.z);
+	/*double boxTVolum = (maxTConer.x - minTConer.x) * (maxTConer.y - minTConer.y) * (maxTConer.z - minTConer.z);
 	double boxVolum = (maxConer.x - minConer.x) * (maxConer.y - minConer.y) * (maxConer.z - minConer.z);
 
 	if (boxTVolum > boxVolum) {
 		maxConer = maxTConer;
 		minConer = minTConer;
-	}
+	}*/
 	//V_prev = vertexes;
 	vertexOffset = vertexNum;
 	D12x12Num = 0;
@@ -499,15 +499,15 @@ bool tetrahedra_obj::load_tetrahedraMesh_IPC_TetMesh(const std::string& filename
 
 				constraints.push_back(constraint);
 
-				if (xmin > vertex.x) xmin = vertex.x;
+				/*if (xmin > vertex.x) xmin = vertex.x;
 				if (ymin > vertex.y) ymin = vertex.y;
 				if (zmin > vertex.z) zmin = vertex.z;
 				if (xmax < vertex.x) xmax = vertex.x;
 				if (ymax < vertex.y) ymax = vertex.y;
-				if (zmax < vertex.z) zmax = vertex.z;
+				if (zmax < vertex.z) zmax = vertex.z;*/
 			}
-			minTConer = make_double3(xmin, ymin, zmin);
-			maxTConer = make_double3(xmax, ymax, zmax);
+			//minTConer = make_double3(xmin, ymin, zmin);
+			//maxTConer = make_double3(xmax, ymax, zmax);
 		}
 
 		if (line == "$Elements") {
@@ -540,13 +540,13 @@ bool tetrahedra_obj::load_tetrahedraMesh_IPC_TetMesh(const std::string& filename
 	}
 	ifs.close();
 
-	double boxTVolum = (maxTConer.x - minTConer.x) * (maxTConer.y - minTConer.y) * (maxTConer.z - minTConer.z);
-	double boxVolum = (maxConer.x - minConer.x) * (maxConer.y - minConer.y) * (maxConer.z - minConer.z);
+	//double boxTVolum = (maxTConer.x - minTConer.x) * (maxTConer.y - minTConer.y) * (maxTConer.z - minTConer.z);
+	//double boxVolum = (maxConer.x - minConer.x) * (maxConer.y - minConer.y) * (maxConer.z - minConer.z);
 
-	if (boxTVolum > boxVolum) {
+	/*if (boxTVolum > boxVolum) {
 		maxConer = maxTConer;
 		minConer = minTConer;
-	}
+	}*/
 	//V_prev = vertexes;
 	vertexOffset = vertexNum;
 	D12x12Num = 0;

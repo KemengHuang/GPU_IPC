@@ -1,2 +1,0 @@
-../GPU_IPC/mLBVH/tetMesh/bunny2.msh 0.2 0 0.65 0
-../GPU_IPC/mLBVH/tetMesh/bunny2.msh 0.2 0 -0.65 0

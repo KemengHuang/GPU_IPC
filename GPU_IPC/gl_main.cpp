@@ -63,7 +63,7 @@ bool drawbvh = false;
 bool drawSurface = true;
 
 bool stop = true;
-
+int     totalFrames = 50;
 double3 center;
 double3 Ssize;
 
@@ -571,42 +571,39 @@ void initFEM(tetrahedra_obj& mesh) {
 
 void DefaultSettings()
 {
-	// global settings
-	ipc.density = 1e3;
-	ipc.YoungModulus = 1e5;
-	ipc.PoissonRate = 0.49;
-	ipc.lengthRateLame = ipc.YoungModulus / (2 * (1 + ipc.PoissonRate));
-	ipc.volumeRateLame = ipc.YoungModulus * ipc.PoissonRate / ((1 + ipc.PoissonRate) * (1 - 2 * ipc.PoissonRate));
-	ipc.lengthRate = 4 * ipc.lengthRateLame / 3;
-	ipc.volumeRate = ipc.volumeRateLame + 5 * ipc.lengthRateLame / 6;
-	ipc.frictionRate = 0.4;
-	ipc.clothThickness = 1e-3;
-	ipc.clothYoungModulus = 1e6;
-	ipc.stretchStiff = ipc.clothYoungModulus / (2 * (1 + ipc.PoissonRate));
-	ipc.shearStiff = ipc.stretchStiff * 0.05;
-	ipc.clothDensity = 2e2;
-	ipc.softMotionRate = 1e0;
-	ipc.bendStiff = 3e-4;
-	ipc.Newton_solver_threshold = 1e-1;
-	ipc.pcg_threshold = 1e-3;
-	ipc.IPC_dt = 1e-2;
-	ipc.relative_dhat = 1e-3;
-	ipc.bendStiff = ipc.clothYoungModulus * pow(ipc.clothThickness, 3) / (24 * (1 - ipc.PoissonRate * ipc.PoissonRate));
-	ipc.shearStiff = 0.03 * ipc.stretchStiff;
+    // global settings
+    ipc.density        = 1e3;
+    ipc.YoungModulus   = 1e5;
+    ipc.PoissonRate    = 0.49;
+    ipc.lengthRateLame = ipc.YoungModulus / (2 * (1 + ipc.PoissonRate));
+    ipc.volumeRateLame = ipc.YoungModulus * ipc.PoissonRate
+                         / ((1 + ipc.PoissonRate) * (1 - 2 * ipc.PoissonRate));
+    ipc.lengthRate        = 4 * ipc.lengthRateLame / 3;
+    ipc.volumeRate        = ipc.volumeRateLame + 5 * ipc.lengthRateLame / 6;
+    ipc.frictionRate      = 0.4;
+    ipc.clothThickness    = 1e-3;
+    ipc.clothYoungModulus = 1e6;
+    ipc.stretchStiff      = ipc.clothYoungModulus / (2 * (1 + ipc.PoissonRate));
+    ipc.shearStiff        = ipc.stretchStiff * 0.03;
+    ipc.clothDensity      = 2e2;
+    ipc.softMotionRate    = 1e0;
+    collision_detection_buff_scale = 2;
+    motion_rate                    = 1;
+    //ipc.bendStiff = 3e-4;
+    ipc.Newton_solver_threshold = 1e-2;
+    ipc.pcg_threshold           = 1e-4;
+    ipc.IPC_dt                  = 1e-2;
+    ipc.relative_dhat           = 1e-3;
+    ipc.bendStiff               = ipc.clothYoungModulus * pow(ipc.clothThickness, 3)/ (24 * (1 - ipc.PoissonRate * ipc.PoissonRate));
+    //ipc.shearStiff = 0.03 * ipc.stretchStiff;
 }
 
 void LoadSettings() {
 	bool successfulRead = false;
 
-	//read file
 	std::ifstream infile;
 
-#ifdef _WIN32
-	string DEFAULT_CONFIG_FILE = std::string{ gipc::assets_dir() } + "scene/windows/parameterSetting.txt";
-#else
-	string DEFAULT_CONFIG_FILE = "../GPU_IPC/mLBVH/scene/parameterSetting.txt";
-#endif
-
+	string DEFAULT_CONFIG_FILE = std::string{ gipc::assets_dir() } + "scene/parameterSetting.txt";
 
 	infile.open(DEFAULT_CONFIG_FILE, std::ifstream::in);
 	if (successfulRead = infile.is_open())
@@ -639,7 +636,7 @@ void LoadSettings() {
 		ipc.volumeRate = ipc.volumeRateLame + 5 * ipc.lengthRateLame / 6;
 		ipc.stretchStiff = ipc.clothYoungModulus / (2 * (1 + ipc.PoissonRate));
 
-		ipc.bendStiff = ipc.clothYoungModulus * pow(ipc.clothThickness, 3) / (24 * (1 - ipc.PoissonRate * ipc.PoissonRate));
+		ipc.bendStiff  = ipc.clothYoungModulus * pow(ipc.clothThickness, 3) / (24 * (1 - ipc.PoissonRate * ipc.PoissonRate));
 		ipc.shearStiff = 0.03 * ipc.stretchStiff;
 		printf("ipc.bendStiff: %f\n", ipc.bendStiff);
 		//ipc.shearStiff = 
@@ -651,20 +648,25 @@ void LoadSettings() {
 		std::cerr << "Waning: failed loading settings, set to defaults." << std::endl;
 		DefaultSettings();
 	}
+
+	printf("cloth stretchStiff: %f,   cloth shearing:  %f \n", ipc.stretchStiff, ipc.shearStiff);
 }
 
 
 
-void initScene1() {
+void initScene1(int argc, char** argv)
+{
 
 	auto assets_dir = std::string{ gipc::assets_dir() };
-
+    //string filePath(scene_file_path);
     tetMesh.load_tetrahedraMesh(
         assets_dir + "tetMesh/bunny2.msh", 0.2, make_double3(0, 0.65, 0));
     tetMesh.load_tetrahedraMesh(
         assets_dir + "tetMesh/bunny2.msh", 0.2, make_double3(0, -0, 0));
-
-
+    //tetMesh.load_triMesh(assets_dir + filePath, 1, make_double3(0, -0, 0), 0);
+    //tetMesh.boundaryTypies[0] = 1;
+    //__GEIGEN__::__set_Mat_val(tetMesh.constraints[0], 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    //tetMesh.constraints[0] = 
 	tetMesh.getSurface();
 
 	initFEM(tetMesh);
@@ -703,7 +705,7 @@ void initScene1() {
 	ipc.surf_vertexNum = tetMesh.surfVerts.size();
 	ipc.surface_Num = tetMesh.surface.size();
 	ipc.edge_Num = tetMesh.surfEdges.size();
-	ipc.tri_edge_num = tetMesh.tri_edges.size();
+    ipc.tri_edge_num   = tetMesh.tri_edges.size();
 
 	//ipc.IPC_dt = 0.01 / 1.0;//1.0 / 30;//1.0 / 100;
 	ipc.MAX_CCD_COLLITION_PAIRS_NUM = 1 * collision_detection_buff_scale * (((double)(ipc.surface_Num * 15 + ipc.edge_Num * 10)) * std::max((ipc.IPC_dt / 0.01), 2.0));
@@ -755,11 +757,11 @@ void initScene1() {
 	CUDA_SAFE_CALL(cudaMemcpy(d_tetMesh.rest_vertexes, d_tetMesh.o_vertexes, ipc.vertexNum * sizeof(double3), cudaMemcpyDeviceToDevice));
 
 	ipc.buildBVH();
-	ipc.init(tetMesh.meanMass, tetMesh.meanVolum, tetMesh.minConer, tetMesh.maxConer);
+	ipc.init(tetMesh.meanMass, tetMesh.meanVolum);
 	printf("bboxDiagSize2: %f\n", ipc.bboxDiagSize2);
-	printf("maxConer: %f  %f   %f           minCorner: %f  %f   %f\n", tetMesh.maxConer.x, tetMesh.maxConer.y, tetMesh.maxConer.z, tetMesh.minConer.x, tetMesh.minConer.y, tetMesh.minConer.z);
+	//printf("maxConer: %f  %f   %f           minCorner: %f  %f   %f\n", tetMesh.maxConer.x, tetMesh.maxConer.y, tetMesh.maxConer.z, tetMesh.minConer.x, tetMesh.minConer.y, tetMesh.minConer.z);
 
-	printf("restSNKE: %f\n", ipc.RestNHEnergy);
+	//printf("restSNKE: %f\n", ipc.RestNHEnergy);
 	ipc.buildCP();
 	ipc.pcg_data.b = d_tetMesh.fb;
 	ipc._moveDir = ipc.pcg_data.dx;
@@ -823,12 +825,13 @@ void display(void)
 		//saveSurface = !saveSurface;
 	}
 
-//    if(step>=60){
-//        exit(0);
-//    }
+    //if(step >= totalFrames)
+    //{
+    //    exit(0);
+    //}
 }
 
-void init(void)
+void init(int argc, char** argv)
 {
 	Init_CUDA();
 
@@ -845,7 +848,7 @@ void init(void)
 
 
 	LoadSettings();
-	initScene1();
+    initScene1(argc, argv);
 
 		glViewport(0, 0, window_width, window_height);
 		glMatrixMode(GL_PROJECTION);
@@ -1019,8 +1022,16 @@ int main(int argc, char** argv)
 	glutInitWindowPosition(0, 0);
 	glutCreateWindow("FEM");
 
-	init();
-
+	//if(argc < 2)
+ //   {
+ //       printf("pls input the mesh path\n");
+ //   }
+    init(argc, argv);
+    //if(argc == 3)
+    //{
+    //    totalFrames = atoi(argv[2]);
+    //}
+	
 	//glEnable(GL_VERTEX_PROGRAM_POINT_SIZE_NV);
 	//glEnable(GL_POINT_SPRITE_ARB);
 	//glTexEnvi(GL_POINT_SPRITE_ARB, GL_COORD_REPLACE_ARB, GL_TRUE);

@@ -87,11 +87,11 @@ public:
 	int softNum;
 	int vertexOffset;
 
-	double3 minTConer;
-	double3 maxTConer;
+	//double3 minTConer;
+	//double3 maxTConer;
 
-	double3 minConer;
-	double3 maxConer;
+	//double3 minConer;
+	//double3 maxConer;
 	tetrahedra_obj();
 	int getVertNeighbors();
 	//void InitMesh(int type, double scale);
