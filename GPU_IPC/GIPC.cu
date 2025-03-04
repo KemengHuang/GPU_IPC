@@ -9853,6 +9853,8 @@ int GIPC::calculateMovingDirection(device_TetraData& TetMesh, int cpNum, int pre
                 &TetMesh, &pcg_data, BH, _moveDir, vertexNum, tetrahedraNum, IPC_dt, meanVolumn, pcg_threshold);
             printf("PCG finish:  %d\n", cgCount);
         }
+
+        return cgCount;
     }
 }
 

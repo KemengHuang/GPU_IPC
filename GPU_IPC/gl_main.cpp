@@ -24,7 +24,7 @@
 #include "gpu_eigen_libs.cuh"
 #include "fem_parameters.h"
 #include "gipc_path.h"
-
+#include "math.h"
 
 int              collision_detection_buff_scale = 1;
 double           motion_rate                    = 1;
