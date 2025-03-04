@@ -226,7 +226,7 @@ __global__ void _buildConnectMaskLx(const unsigned int* _neighborStart,
         atomicOr(cacheMsk + localWarpId * BANKSIZE, connMsk);
         connMsk = cacheMsk[localWarpId * BANKSIZE];
         //if (laneId == 0) {
-        //  cacheMsk[localWarpId] = 0;
+        //	cacheMsk[localWarpId] = 0;
         //}
     }
     else
@@ -432,14 +432,14 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         int         coffset = qcid % 3;
         Precision_T Hval    = Hessians12[Hid].m[qrid][qcid];
 
-        int cPid  = vertCid / 32;
+        int cPid  = vertCid / BANKSIZE;
         int level = 0;
-        while(vertCid / 32 != vertRid / 32 && level < levelNum)
+        while(vertCid / BANKSIZE != vertRid / BANKSIZE && level < levelNum)
         {
             level++;
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
-            cPid    = vertCid / 32;
+            cPid    = vertCid / BANKSIZE;
         }
         if(level >= levelNum)
         {
@@ -447,7 +447,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         }
         //int cPid = vertCid / 32;
 
-        atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+        atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                   Hval);
 
         while(level < levelNum - 1)
@@ -455,11 +455,11 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             level++;
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
-            cPid    = vertCid / 32;
-            if(vertCid / 32 == vertRid / 32)
+            cPid    = vertCid / BANKSIZE;
+            if(vertCid / BANKSIZE == vertRid / BANKSIZE)
             {
 
-                atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+                atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                           Hval);
             }
         }
@@ -487,20 +487,20 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         Precision_T Hval = Hessians9[Hid].m[qrid][qcid];
 
-        int cPid  = vertCid / 32;
+        int cPid  = vertCid / BANKSIZE;
         int level = 0;
-        while(vertCid / 32 != vertRid / 32 && level < levelNum)
+        while(vertCid / BANKSIZE != vertRid / BANKSIZE && level < levelNum)
         {
             level++;
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
-            cPid    = vertCid / 32;
+            cPid    = vertCid / BANKSIZE;
         }
         if(level >= levelNum)
         {
             return;
         }
-        atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+        atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                   Hval);
 
         while(level < levelNum - 1)
@@ -508,11 +508,10 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             level++;
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
-            cPid    = vertCid / 32;
-            if(vertCid / 32 == vertRid / 32)
+            cPid    = vertCid / BANKSIZE;
+            if(vertCid / BANKSIZE == vertRid / BANKSIZE)
             {
-
-                atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+                atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                           Hval);
             }
         }
@@ -541,20 +540,20 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         Precision_T Hval = Hessians6[Hid].m[qrid][qcid];
 
-        int cPid  = vertCid / 32;
+        int cPid  = vertCid / BANKSIZE;
         int level = 0;
-        while(vertCid / 32 != vertRid / 32 && level < levelNum)
+        while(vertCid / BANKSIZE != vertRid / BANKSIZE && level < levelNum)
         {
             level++;
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
-            cPid    = vertCid / 32;
+            cPid    = vertCid / BANKSIZE;
         }
         if(level >= levelNum)
         {
             return;
         }
-        atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+        atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                   Hval);
 
         while(level < levelNum - 1)
@@ -562,11 +561,11 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             level++;
             vertCid = _goingNext[vertCid];
             vertRid = _goingNext[vertRid];
-            cPid    = vertCid / 32;
-            if(vertCid / 32 == vertRid / 32)
+            cPid    = vertCid / BANKSIZE;
+            if(vertCid / BANKSIZE == vertRid / BANKSIZE)
             {
 
-                atomicAdd(&(P96[cPid].m[(vertRid % 32) * 3 + roffset][(vertCid % 32) * 3 + coffset]),
+                atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                           Hval);
             }
         }
@@ -584,8 +583,8 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         Precision_T Hval = Hessians3[Hid].m[qrid][qcid];
 
-        int cPid  = nodeIndex / 32;
-        int Pod   = nodeIndex % 32;
+        int cPid  = nodeIndex / BANKSIZE;
+        int Pod   = nodeIndex % BANKSIZE;
         int level = 0;
 
 
@@ -595,8 +594,8 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         {
             level++;
             nodeIndex = _goingNext[nodeIndex];
-            Pod       = nodeIndex % 32;
-            cPid      = nodeIndex / 32;
+            Pod       = nodeIndex % BANKSIZE;
+            cPid      = nodeIndex / BANKSIZE;
             atomicAdd(&(P96[cPid].m[Pod * 3 + qrid][Pod * 3 + qcid]), Hval);
         }
     }
@@ -611,13 +610,13 @@ __global__ void __setMassMat_P96(const double*             _masses,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= number)
         return;
-    int warpId = idx / 32;
-    int laneId = idx % 32;
+    int warpId = idx / BANKSIZE;
+    int laneId = idx % BANKSIZE;
 
     Precision_T mass = _masses[idx];
 
-    int Pid = idx / 32;
-    int Pod = idx % 32;
+    int Pid = idx / BANKSIZE;
+    int Pod = idx % BANKSIZE;
 
     _Mat96[Pid].m[Pod * 3][Pod * 3]         = mass;
     _Mat96[Pid].m[Pod * 3 + 1][Pod * 3 + 1] = mass;
@@ -629,8 +628,8 @@ __global__ void __setMassMat_P96(const double*             _masses,
     {
         level++;
         idx = _goingNext[idx];
-        Pid = idx / 32;
-        Pod = idx % 32;
+        Pid = idx / BANKSIZE;
+        Pod = idx % BANKSIZE;
         atomicAdd(&(_Mat96[Pid].m[Pod * 3][Pod * 3]), mass);
         atomicAdd(&(_Mat96[Pid].m[Pod * 3 + 1][Pod * 3 + 1]), mass);
         atomicAdd(&(_Mat96[Pid].m[Pod * 3 + 2][Pod * 3 + 2]), mass);
@@ -860,73 +859,6 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
 //}
 
 
-__global__ void __warp_inverse_P96x96(__GEIGEN__::Matrix96x96MT* P96,
-                                      __GEIGEN__::Matrix96x96T*  invP96,
-                                      int                        numbers)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= numbers)
-        return;
-
-    int matId = idx / 32;
-    int i     = idx % 32;
-
-    for(int j = 0; j < 96; j++)
-    {
-        for(int k = 0; k < 3; k++)
-        {
-            int cid = (i + 32 * k);
-            if(cid == j)
-            {
-                invP96[matId].m[j][cid] = 1;
-                if(P96[matId].m[j][cid] == 0)
-                {
-                    P96[matId].m[j][cid] = 1;
-                }
-            }
-            else
-            {
-                invP96[matId].m[j][cid] = 0;
-            }
-        }
-    }
-
-    int         j  = 0;
-    Precision_T rt = P96[matId].m[j][j];
-    while(j < 96)
-    {
-
-        for(int t = 0; t < 3; t++)
-        {
-            int cid = i + t * 32;
-            if(cid >= j)
-            {
-                P96[matId].m[j][cid] /= rt;
-            }
-            invP96[matId].m[j][cid] /= rt;
-        }
-
-        for(int k = 0; k < 96; k++)
-        {
-            if(k != j)
-            {
-                Precision_T rate = -P96[matId].m[k][j];
-                for(int t = 0; t < 3; t++)
-                {
-                    int cid = i + t * 32;
-                    invP96[matId].m[k][cid] += rate * invP96[matId].m[j][cid];
-                    if(cid >= j)
-                    {
-                        P96[matId].m[k][cid] += rate * P96[matId].m[j][cid];
-                    }
-                }
-            }
-        }
-
-        j++;
-        rt = P96[matId].m[j][j];
-    }
-}
 
 __global__ void __buildMultiLevelR_optimized(const double3* _R,
                                              Precision_T3*  _multiLR,
@@ -944,17 +876,17 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
     r.y = _R[idx].y;
     r.z = _R[idx].z;
 
-    int laneId      = threadIdx.x % 32;
-    int localWarpId = threadIdx.x / 32;
+    int laneId      = threadIdx.x % BANKSIZE;
+    int localWarpId = threadIdx.x / BANKSIZE;
     int level       = 0;
     _multiLR[idx]   = r;
 
-    __shared__ Precision_TM c_sumResidual[DEFAULT_BLOCKSIZE * 3];
+    __shared__ double c_sumResidual[DEFAULT_BLOCKSIZE * 3];
 
     unsigned int connectMsk = _fineConnectMsk[idx];
-    if(connectMsk == -1)
+    if(__popc(connectMsk) == BANKSIZE)
     {
-        for(int iter = 1; iter < 32; iter <<= 1)
+        for(int iter = 1; iter < BANKSIZE; iter <<= 1)
         {
             r.x += __shfl_down(r.x, iter);
             r.y += __shfl_down(r.y, iter);
@@ -982,9 +914,10 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
         c_sumResidual[threadIdx.x]                         = 0;
         c_sumResidual[threadIdx.x + DEFAULT_BLOCKSIZE]     = 0;
         c_sumResidual[threadIdx.x + 2 * DEFAULT_BLOCKSIZE] = 0;
-        atomicAdd(c_sumResidual + localWarpId * 32 + elected_lane, r.x);
-        atomicAdd(c_sumResidual + localWarpId * 32 + elected_lane + DEFAULT_BLOCKSIZE, r.y);
-        atomicAdd(c_sumResidual + localWarpId * 32 + elected_lane + 2 * DEFAULT_BLOCKSIZE,
+        atomicAdd(c_sumResidual + localWarpId * BANKSIZE + elected_lane, r.x);
+        atomicAdd(c_sumResidual + localWarpId * BANKSIZE + elected_lane + DEFAULT_BLOCKSIZE,
+                  r.y);
+        atomicAdd(c_sumResidual + localWarpId * BANKSIZE + elected_lane + 2 * DEFAULT_BLOCKSIZE,
                   r.z);
 
         unsigned int electedPrefix = __popc(connectMsk & _LanemaskLt(laneId));
@@ -1057,75 +990,6 @@ __global__ void __collectFinalZ(double3*            _Z,
     _Z[idx].z = cz.z;
 }
 
-__global__ void _schwarzLocalXSym0(const __GEIGEN__::Matrix96x96MT* P96,
-                                   const Precision_T3*              mR,
-                                   Precision_T3*                    mZ,
-                                   int                              number)
-{
-    namespace cg = ::cooperative_groups;
-    int idx      = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= number)
-        return;
-
-    auto tile = cg::tiled_partition<32>(cg::this_thread_block());
-
-    int tileNo = idx / 32;
-    int Hid    = tileNo / 96;
-    int MRid   = tileNo % 96;
-
-    int  vrid   = Hid * 32 + MRid / 3;
-    auto laneid = tile.thread_rank();
-
-    Precision_TM sum      = 0.;
-    auto         get_vcid = [Hid](int cid) { return Hid * 32 + cid / 3; };
-    sum += P96[Hid].m[MRid][laneid] * (*(&(mR[get_vcid(laneid)].x) + laneid % 3));
-    laneid += 32;
-    sum += P96[Hid].m[MRid][laneid] * (*(&(mR[get_vcid(laneid)].x) + laneid % 3));
-    laneid += 32;
-    sum += P96[Hid].m[MRid][laneid] * (*(&(mR[get_vcid(laneid)].x) + laneid % 3));
-
-    auto val = cg::reduce(tile, sum, cg::plus<Precision_TM>());
-    if(tile.thread_rank() == 0)
-        *(&(mZ[vrid].x) + MRid % 3) += val;
-}
-
-__global__ void _schwarzLocalXSym(const __GEIGEN__::Matrix96x96MT* P96,
-                                  const Precision_T3*              mR,
-                                  Precision_T3*                    mZ,
-                                  int                              number)
-{
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= number)
-        return;
-
-    int hessianSize = 96 * 96;
-
-    int Hid  = idx / hessianSize;
-    int MRid = (idx % hessianSize) / 96;
-    int MCid = (idx % hessianSize) % 96;
-
-    int vrid = Hid * 32 + MRid / 3;
-    int vcid = Hid * 32 + MCid / 3;
-
-    //int vId = MCid / 3;
-    int axisId = MCid % 3;
-    //int GRtid = idx % 96;
-
-    Precision_TM rdata = P96[Hid].m[MRid][MCid] * (*(&(mR[vcid].x) + axisId));
-
-    int warpId = threadIdx.x & 0x1f;
-
-    unsigned int interval = 32;
-
-    for(int iter = 1; iter < 32; iter <<= 1)
-    {
-        rdata += __shfl_down(rdata, iter);
-    }
-
-    if(!warpId)
-        atomicAdd((&(mZ[vrid].x) + MRid % 3), rdata);
-}
 
 __global__ void _schwarzLocalXSym3(const __GEIGEN__::MasMatrixSymf* Pred,
                                    const Precision_T3*              mR,
