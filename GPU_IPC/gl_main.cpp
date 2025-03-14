@@ -1000,6 +1000,10 @@ void init(int argc, char** argv)
     std::cerr << "Status: Using GLEW " << glewGetString(GLEW_VERSION) << std::endl;
     glClearColor(0.0, 0.0, 0.0, 1.0);
 
+    auto output_path = std::string{gipc::output_dir()};
+    std::filesystem::exists(output_path)
+        || std::filesystem::create_directories(output_path);
+
 
     LoadSettings();
     initScene1(argc, argv);
