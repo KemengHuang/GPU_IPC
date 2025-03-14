@@ -1196,6 +1196,8 @@ __global__ void __PCG_inverse_P(__GEIGEN__::Matrix3x3d* P, int numbers) {
 double My_PCG_add_Reduction_Algorithm(int type, device_TetraData* mesh, PCG_Data* pcg_data, int vertexNum, double alpha = 1) {
 
     int numbers = vertexNum;
+    if(numbers < 1)
+        return 0;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
@@ -1234,6 +1236,8 @@ double My_PCG_add_Reduction_Algorithm(int type, device_TetraData* mesh, PCG_Data
 
 void Solve_PCG_AX_B(const device_TetraData* mesh, const double3* c, double3* q, const BHessian& BH, int vertNum) {
     int numbers = vertNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_Solve_AX_mass_b << <blockNum, threadNum >> > (mesh->masses, c, q, numbers);
@@ -1264,6 +1268,8 @@ void Solve_PCG_AX_B(const device_TetraData* mesh, const double3* c, double3* q, 
 
 void PCG_Update_Dx_R(const double3* c, double3* dx, const double3* q, double3* r, const double& rate, int vertexNum) {
     int numbers = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_Update_Dx_R << <blockNum, threadNum >> > (c, dx, q, r, rate, numbers);
@@ -1273,6 +1279,8 @@ void PCG_Update_Dx_R(const double3* c, double3* dx, const double3* q, double3* r
 double My_PCG_General_v_v_Reduction_Algorithm(device_TetraData* mesh, PCG_Data* pcg_data, double3* A, double3* B, int vertexNum) {
 
     int numbers = vertexNum;
+    if(numbers < 1)
+        return 0;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
@@ -1298,6 +1306,8 @@ double My_PCG_General_v_v_Reduction_Algorithm(device_TetraData* mesh, PCG_Data* 
 
 void Solve_PCG_AX_B2(const device_TetraData* mesh, const double3* c, double3* q, const BHessian& BH, int vertNum) {
     int numbers = vertNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_Solve_AX_mass_b << <blockNum, threadNum >> > (mesh->masses, c, q, numbers);
@@ -1313,6 +1323,8 @@ void Solve_PCG_AX_B2(const device_TetraData* mesh, const double3* c, double3* q,
 
 void construct_P(const device_TetraData* mesh, __GEIGEN__::Matrix3x3d* P, const BHessian& BH, int vertNum) {
     int numbers = vertNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_mass_P << <blockNum, threadNum >> > (mesh->masses, P, numbers);
@@ -1344,6 +1356,8 @@ void construct_P(const device_TetraData* mesh, __GEIGEN__::Matrix3x3d* P, const 
 
 void construct_P2(const device_TetraData* mesh, __GEIGEN__::Matrix3x3d* P, const BHessian& BH, int vertNum) {
     int numbers = vertNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_mass_P << <blockNum, threadNum >> > (mesh->masses, P, numbers);
@@ -1360,6 +1374,8 @@ void construct_P2(const device_TetraData* mesh, __GEIGEN__::Matrix3x3d* P, const
 
 void PCG_FinalStep_UpdateC(const device_TetraData* mesh, double3* c, const double3* s, const double& rate, int vertexNum) {
     int numbers = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_FinalStep_UpdateC << <blockNum, threadNum >> > (mesh->Constraints, s, c, rate, numbers);
@@ -1367,6 +1383,8 @@ void PCG_FinalStep_UpdateC(const device_TetraData* mesh, double3* c, const doubl
 
 void PCG_initDX(double3* dx, const double3* z, double rate, int vertexNum) {
     int numbers = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_initDX << <blockNum, threadNum >> > (dx, z, rate, numbers);
@@ -1374,6 +1392,8 @@ void PCG_initDX(double3* dx, const double3* z, double rate, int vertexNum) {
 
 void PCG_constraintFilter(const device_TetraData* mesh, const double3* input, double3* output, int vertexNum) {
     int numbers = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     __PCG_constraintFilter << <blockNum, threadNum >> > (mesh->Constraints, input, output, numbers);

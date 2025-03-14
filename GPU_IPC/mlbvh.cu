@@ -1282,6 +1282,8 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
 AABB calcMaxBV(AABB* _leafBoxes, AABB* _tempLeafBox, const int& number) {
 
     int numbers = number;
+    //if(numbers < 1)
+    //    return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
@@ -1312,6 +1314,8 @@ AABB calcMaxBV(AABB* _leafBoxes, AABB* _tempLeafBox, const int& number) {
 template <class element_type>
 void calcLeafBvs(const double3* _vertexes, const element_type* _faces, AABB* _bvs, const int& faceNum, const int& type) {
     int numbers = faceNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     _calcLeafBvs << <blockNum, threadNum >> > (_vertexes, _faces, _bvs + numbers - 1, faceNum, type);
@@ -1320,6 +1324,8 @@ void calcLeafBvs(const double3* _vertexes, const element_type* _faces, AABB* _bv
 template <class element_type>
 void calcLeafBvs_fullCCD(const double3* _vertexes, const double3* _moveDir, const double& alpha, const element_type* _faces, AABB* _bvs, const int& faceNum, const int& type) {
     int numbers = faceNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     _calcLeafBvs_ccd << <blockNum, threadNum >> > (_vertexes, _moveDir, alpha, _faces, _bvs + numbers - 1, faceNum, type);
@@ -1327,6 +1333,8 @@ void calcLeafBvs_fullCCD(const double3* _vertexes, const double3* _moveDir, cons
 
 void calcMChash(uint64_t* _MChash, AABB* _bvs, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     _calcMChash << <blockNum, threadNum >> > (_MChash, _bvs, number);
@@ -1334,6 +1342,8 @@ void calcMChash(uint64_t* _MChash, AABB* _bvs, int number) {
 
 void calcLeafNodes(Node* _nodes, const uint32_t* _indices, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     _calcLeafNodes << <blockNum, threadNum >> > (_nodes, _indices, number);
@@ -1341,6 +1351,8 @@ void calcLeafNodes(Node* _nodes, const uint32_t* _indices, int number) {
 
 void calcInternalNodes(Node* _nodes, const uint64_t* _MChash, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     _calcInternalNodes << <blockNum, threadNum >> > (_nodes, _MChash, number);
@@ -1348,6 +1360,8 @@ void calcInternalNodes(Node* _nodes, const uint64_t* _MChash, int number) {
 
 void calcInternalAABB(const Node* _nodes, AABB* _bvs, uint32_t* flags, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     //uint32_t* flags;
@@ -1360,6 +1374,8 @@ void calcInternalAABB(const Node* _nodes, AABB* _bvs, uint32_t* flags, int numbe
 
 void sortBvs(const uint32_t* _indices, AABB* _bvs, AABB* _temp_bvs, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     //AABB* _temp_bvs = _tempLeafBox;
@@ -1372,6 +1388,8 @@ void sortBvs(const uint32_t* _indices, AABB* _bvs, AABB* _temp_bvs, int number) 
 
 void selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _rest_vertexes, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     
@@ -1380,6 +1398,8 @@ void selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _r
 
 void fullCCDselfQuery_ee(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
@@ -1388,6 +1408,8 @@ void fullCCDselfQuery_ee(const int* _btype, const double3* _vertexes, const doub
 
 void selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
@@ -1396,6 +1418,8 @@ void selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _fac
 
 void fullCCDselfQuery_vf(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, int number) {
     int numbers = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 

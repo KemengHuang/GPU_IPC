@@ -1342,6 +1342,8 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
 void MASPreconditioner::BuildConnectMaskL0()
 {
     int number    = totalNodes;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 
@@ -1352,6 +1354,8 @@ void MASPreconditioner::BuildConnectMaskL0()
 void MASPreconditioner::PreparePrefixSumL0()
 {
     int number    = totalNodes;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 
@@ -1361,6 +1365,8 @@ void MASPreconditioner::PreparePrefixSumL0()
 void MASPreconditioner::BuildLevel1()
 {
     int number    = totalNodes;
+    if(number < 1)
+        return;
     int blockSize = BANKSIZE * BANKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
     //exclusive(d_prefixOriginal, d_prefixSumOriginal); wait to do;
@@ -1380,6 +1386,8 @@ void MASPreconditioner::BuildLevel1()
 void MASPreconditioner::BuildConnectMaskLx(int level)
 {
     int number    = totalNodes;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
     _buildConnectMaskLx<<<numBlocks, blockSize>>>(d_neighborStart,
@@ -1395,6 +1403,8 @@ void MASPreconditioner::BuildConnectMaskLx(int level)
 void MASPreconditioner::NextLevelCluster(int level)
 {
     int number    = h_clevelSize.x;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
     _nextLevelCluster<<<numBlocks, blockSize>>>(d_nextConnectMask, d_nextPrefix, number);
@@ -1403,6 +1413,8 @@ void MASPreconditioner::NextLevelCluster(int level)
 void MASPreconditioner::ComputeNextLevel(int level)
 {
     int number    = totalNodes;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
     _computeNextLevel<<<numBlocks, blockSize>>>(
@@ -1412,6 +1424,8 @@ void MASPreconditioner::ComputeNextLevel(int level)
 void MASPreconditioner::PrefixSumLx(int level)
 {
     int number     = h_clevelSize.x;
+    if(number < 1)
+        return;
     int levelBegin = h_clevelSize.y;
     int blockSize  = BANKSIZE * BANKSIZE;
     int numBlocks  = (number + blockSize - 1) / blockSize;
@@ -1428,6 +1442,8 @@ void MASPreconditioner::PrefixSumLx(int level)
 void MASPreconditioner::AggregationKernel()
 {
     int number    = totalNodes;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
     _aggregationKernel<<<numBlocks, blockSize>>>(
@@ -1463,6 +1479,8 @@ void MASPreconditioner::BuildCollisionConnection(unsigned int* connectionMsk,
                                                  int           cpNum)
 {
     int number    = cpNum;
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 
@@ -1569,7 +1587,8 @@ void MASPreconditioner::PrepareHessian(const BHessian& BH, const double* masses)
 
 
     int number = totalNodes;
-
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 
@@ -1626,7 +1645,8 @@ void MASPreconditioner::PrepareHessian(const BHessian& BH, const double* masses)
 void MASPreconditioner::BuildMultiLevelR(const double3* R)
 {
     int number = totalNodes;
-
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 
@@ -1646,6 +1666,8 @@ void MASPreconditioner::BuildMultiLevelR(const double3* R)
 void MASPreconditioner::SchwarzLocalXSym()
 {
     int number    = totalNumberClusters * BANKSIZE * 3;
+    if(number < 1)
+        return;
     int blockSize = BANKSIZE * BANKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 
@@ -1656,7 +1678,8 @@ void MASPreconditioner::SchwarzLocalXSym()
 void MASPreconditioner::CollectFinalZ(double3* Z)
 {
     int number = totalNodes;
-
+    if(number < 1)
+        return;
     int blockSize = DEFAULT_BLOCKSIZE;
     int numBlocks = (number + blockSize - 1) / blockSize;
 

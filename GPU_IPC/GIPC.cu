@@ -8520,29 +8520,36 @@ void GIPC::buildFrictionSets()
     int                numbers   = h_cpNum[0];
     const unsigned int threadNum = 256;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
-    _calFrictionLastH_DistAndTan<<<blockNum, threadNum>>>(_vertexes,
-                                                          _collisonPairs,
-                                                          lambda_lastH_scalar,
-                                                          distCoord,
-                                                          tanBasis,
-                                                          _collisonPairs_lastH,
-                                                          dHat,
-                                                          Kappa,
-                                                          _cpNum,
-                                                          h_cpNum[0]);
+    if(numbers > 0)
+    {
+        _calFrictionLastH_DistAndTan<<<blockNum, threadNum>>>(_vertexes,
+                                                              _collisonPairs,
+                                                              lambda_lastH_scalar,
+                                                              distCoord,
+                                                              tanBasis,
+                                                              _collisonPairs_lastH,
+                                                              dHat,
+                                                              Kappa,
+                                                              _cpNum,
+                                                              h_cpNum[0]);
+        
+    }
     CUDA_SAFE_CALL(cudaMemcpy(h_cpNum_last, _cpNum, 5 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
+    numbers = h_gpNum;
+    if(numbers > 0)
+    {
 
-    numbers  = h_gpNum;
-    blockNum = (numbers + threadNum - 1) / threadNum;
-    _calFrictionLastH_gd<<<blockNum, threadNum>>>(_vertexes,
-                                                  _groundOffset,
-                                                  _groundNormal,
-                                                  _environment_collisionPair,
-                                                  lambda_lastH_scalar_gd,
-                                                  _collisonPairs_lastH_gd,
-                                                  dHat,
-                                                  Kappa,
-                                                  h_gpNum);
+        blockNum = (numbers + threadNum - 1) / threadNum;
+        _calFrictionLastH_gd<<<blockNum, threadNum>>>(_vertexes,
+                                                      _groundOffset,
+                                                      _groundNormal,
+                                                      _environment_collisionPair,
+                                                      lambda_lastH_scalar_gd,
+                                                      _collisonPairs_lastH_gd,
+                                                      dHat,
+                                                      Kappa,
+                                                      h_gpNum);
+    }
     h_gpNum_last = h_gpNum;
 }
 
@@ -8550,6 +8557,8 @@ void GIPC::buildFrictionSets()
 void GIPC::GroundCollisionDetect()
 {
     int                numbers   = surf_vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _GroundCollisionDetect<<<blockNum, threadNum>>>(
@@ -8602,6 +8611,8 @@ void GIPC::computeGroundGradientAndHessian(double3* _gradient)
 void GIPC::computeCloseGroundVal()
 {
     int                numbers   = h_gpNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _computeGroundCloseVal<<<blockNum, threadNum>>>(_vertexes,
@@ -8674,6 +8685,8 @@ double2 GIPC::minMaxGroundDist()
 void GIPC::computeGroundGradient(double3* _gradient, double mKappa)
 {
     int                numbers   = h_gpNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _computeGroundGradient<<<blockNum, threadNum>>>(_vertexes,
@@ -8691,7 +8704,8 @@ void GIPC::computeGroundGradient(double3* _gradient, double mKappa)
 void GIPC::computeSoftConstraintGradient(double3* _gradient)
 {
     int numbers = softNum;
-
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     // offset
@@ -8738,6 +8752,8 @@ double GIPC::self_largestFeasibleStepSize(double slackness, double* mqueue, int 
 double GIPC::cfl_largestSpeed(double* mqueue)
 {
     int                numbers   = surf_vertexNum;
+    //if(numbers < 1)
+    //    return ;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
 
@@ -8770,6 +8786,8 @@ double GIPC::cfl_largestSpeed(double* mqueue)
 double reduction2Kappa(int type, const double3* A, const double3* B, double* _queue, int vertexNum)
 {
     int                numbers   = vertexNum;
+    //if(numbers < 1)
+    //    return ;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
 
@@ -8809,6 +8827,8 @@ double GIPC::ground_largestFeasibleStepSize(double slackness, double* mqueue)
 {
 
     int                numbers   = surf_vertexNum;
+    if(numbers < 1)
+        return 1;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
 
@@ -8850,6 +8870,8 @@ double GIPC::InjectiveStepSize(double slackness, double errorRate, double* mqueu
 {
 
     int                numbers   = tetrahedraNum;
+    if(numbers < 1)
+        return 1;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
 
@@ -8996,30 +9018,33 @@ void GIPC::calFrictionHessian(device_TetraData& TetMesh)
     //if (numbers < 1) return;
     const unsigned int threadNum = 256;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
-
-    _calFrictionHessian<<<blockNum, threadNum>>>(_vertexes,
-                                                 TetMesh.o_vertexes,
-                                                 _collisonPairs_lastH,
-                                                 BH.H12x12,
-                                                 BH.H9x9,
-                                                 BH.H6x6,
-                                                 BH.D4Index,
-                                                 BH.D3Index,
-                                                 BH.D2Index,
-                                                 _cpNum,
-                                                 numbers,
-                                                 IPC_dt,
-                                                 distCoord,
-                                                 tanBasis,
-                                                 fDhat * IPC_dt * IPC_dt,
-                                                 lambda_lastH_scalar,
-                                                 frictionRate,
-                                                 h_cpNum[4],
-                                                 h_cpNum[3],
-                                                 h_cpNum[2]);
-
+    if(numbers > 0)
+    {
+        _calFrictionHessian<<<blockNum, threadNum>>>(_vertexes,
+                                                     TetMesh.o_vertexes,
+                                                     _collisonPairs_lastH,
+                                                     BH.H12x12,
+                                                     BH.H9x9,
+                                                     BH.H6x6,
+                                                     BH.D4Index,
+                                                     BH.D3Index,
+                                                     BH.D2Index,
+                                                     _cpNum,
+                                                     numbers,
+                                                     IPC_dt,
+                                                     distCoord,
+                                                     tanBasis,
+                                                     fDhat * IPC_dt * IPC_dt,
+                                                     lambda_lastH_scalar,
+                                                     frictionRate,
+                                                     h_cpNum[4],
+                                                     h_cpNum[3],
+                                                     h_cpNum[2]);
+    }
 
     numbers = h_gpNum_last;
+    if(numbers < 1)
+        return;
     CUDA_SAFE_CALL(cudaMemcpy(_gpNum, &h_gpNum_last, sizeof(uint32_t), cudaMemcpyHostToDevice));
     blockNum = (numbers + threadNum - 1) / threadNum;
 
@@ -9039,6 +9064,8 @@ void GIPC::calFrictionHessian(device_TetraData& TetMesh)
 void GIPC::computeSelfCloseVal()
 {
     int                numbers   = h_cpNum[0];
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _calSelfCloseVal<<<blockNum, threadNum>>>(
@@ -9114,24 +9141,26 @@ void GIPC::calBarrierGradient(double3* _gradient, double mKappa)
 void GIPC::calFrictionGradient(double3* _gradient, device_TetraData& TetMesh)
 {
     int numbers = h_cpNum_last[0];
-    //if (numbers < 1)return;
     const unsigned int threadNum = 256;
-    int                blockNum  = (numbers + threadNum - 1) / threadNum;
-
-    _calFrictionGradient<<<blockNum, threadNum>>>(_vertexes,
-                                                  TetMesh.o_vertexes,
-                                                  _collisonPairs_lastH,
-                                                  _gradient,
-                                                  numbers,
-                                                  IPC_dt,
-                                                  distCoord,
-                                                  tanBasis,
-                                                  fDhat * IPC_dt * IPC_dt,
-                                                  lambda_lastH_scalar,
-                                                  frictionRate);
-
+    int blockNum = 0;
+    if(numbers > 0)
+    {
+        blockNum  = (numbers + threadNum - 1) / threadNum;
+        _calFrictionGradient<<<blockNum, threadNum>>>(_vertexes,
+                                                      TetMesh.o_vertexes,
+                                                      _collisonPairs_lastH,
+                                                      _gradient,
+                                                      numbers,
+                                                      IPC_dt,
+                                                      distCoord,
+                                                      tanBasis,
+                                                      fDhat * IPC_dt * IPC_dt,
+                                                      lambda_lastH_scalar,
+                                                      frictionRate);
+    }
     numbers = h_gpNum_last;
-    //if (numbers < 1)return;
+    if(numbers < 1)
+        return;
     blockNum = (numbers + threadNum - 1) / threadNum;
 
     _calFrictionGradient_gd<<<blockNum, threadNum>>>(_vertexes,
@@ -9149,6 +9178,8 @@ void GIPC::calFrictionGradient(double3* _gradient, device_TetraData& TetMesh)
 
 void calKineticGradient(double3* _vertexes, double3* _xTilta, double3* _gradient, double* _masses, int numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _calKineticGradient<<<blockNum, threadNum>>>(_vertexes, _xTilta, _gradient, _masses, numbers);
@@ -9156,6 +9187,8 @@ void calKineticGradient(double3* _vertexes, double3* _xTilta, double3* _gradient
 
 void calKineticEnergy(double3* _vertexes, double3* _xTilta, double3* _gradient, double* _masses, int numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _calKineticGradient<<<blockNum, threadNum>>>(_vertexes, _xTilta, _gradient, _masses, numbers);
@@ -9235,6 +9268,8 @@ void calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses,
                             double                  dt)
 {
     int                numbers   = tetrahedraNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _calculate_fem_gradient<<<blockNum, threadNum>>>(
@@ -9264,6 +9299,8 @@ double calcMinMovement(const double3* _moveDir, double* _queue, const int& numbe
 {
 
     int                numbers   = number;
+    if(numbers < 1)
+        return 0;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
 
@@ -9301,6 +9338,8 @@ void stepForward(double3* _vertexes,
                  bool     moveBoundary,
                  int      numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _stepForward<<<blockNum, threadNum>>>(
@@ -9310,6 +9349,8 @@ void stepForward(double3* _vertexes,
 
 void updateSurfaces(uint32_t* sortIndex, uint3* _faces, const int& offset_num, const int& numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateSurfaces<<<blockNum, threadNum>>>(sortIndex, _faces, offset_num, numbers);
@@ -9317,6 +9358,8 @@ void updateSurfaces(uint32_t* sortIndex, uint3* _faces, const int& offset_num, c
 
 void updateSurfaceEdges(uint32_t* sortIndex, uint2* _edges, const int& offset_num, const int& numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateEdges<<<blockNum, threadNum>>>(sortIndex, _edges, offset_num, numbers);
@@ -9328,6 +9371,8 @@ void updateTriEdges_adjVerts(uint32_t*  sortIndex,
                              const int& offset_num,
                              const int& numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateTriEdges_adjVerts<<<blockNum, threadNum>>>(
@@ -9337,6 +9382,8 @@ void updateTriEdges_adjVerts(uint32_t*  sortIndex,
 
 void updateSurfaceVerts(uint32_t* sortIndex, uint32_t* _sVerts, const int& offset_num, const int& numbers)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateSurfVerts<<<blockNum, threadNum>>>(sortIndex, _sVerts, offset_num, numbers);
@@ -9353,6 +9400,8 @@ void updateNeighborInfo(unsigned int*   _neighborList,
                         const int&      numbers,
                         const int&      neighborListSize)
 {
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateNeighborNum<<<blockNum, threadNum>>>(_neighborNumInit, _neighborNum, sortIndex, numbers);
@@ -9387,6 +9436,8 @@ void calcTetMChash(uint64_t*         _MChash,
                    int               number)
 {
     int                numbers   = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _calcTetMChash<<<blockNum, threadNum>>>(
@@ -9396,6 +9447,8 @@ void calcTetMChash(uint64_t*         _MChash,
 void updateTopology(uint4* tets, uint3* tris, const uint32_t* sortMapVertIndex, int traNumber, int triNumber)
 {
     int                numbers   = __m_max(traNumber, triNumber);
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _updateTopology<<<blockNum, threadNum>>>(tets, tris, sortMapVertIndex, traNumber, triNumber);
@@ -9414,6 +9467,8 @@ void updateVertexes(double3*                      o_vertexes,
                     int                           number)
 {
     int                numbers   = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _updateVertexes<<<blockNum, threadNum>>>(
@@ -9431,6 +9486,8 @@ void updateTetrahedras(uint4*                        o_tetrahedras,
                        int                           number)
 {
     int                numbers   = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _updateTetrahedras<<<blockNum, threadNum>>>(
@@ -9440,6 +9497,8 @@ void updateTetrahedras(uint4*                        o_tetrahedras,
 void calcVertMChash(uint64_t* _MChash, const double3* _vertexes, const AABB* _MaxBv, int number)
 {
     int                numbers   = number;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     _calcVertMChash<<<blockNum, threadNum>>>(_MChash, _vertexes, _MaxBv, number);
@@ -9869,6 +9928,8 @@ bool edgeTriIntersectionQuery(const int*     _btype,
                               int            number)
 {
     int                numbers   = number;
+    if(numbers < 1)
+        return false;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
     int*               _isIntersect;
@@ -9903,6 +9964,8 @@ bool GIPC::checkEdgeTriIntersectionIfAny(device_TetraData& TetMesh)
 bool GIPC::checkGroundIntersection()
 {
     int                numbers   = h_gpNum;
+    if(numbers < 1)
+        return false;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
 
@@ -10144,9 +10207,6 @@ int              GIPC::solve_subIP(device_TetraData& TetMesh,
         double alpha_CFL  = alpha;
 
         double ccd_size = 1.0;
-#ifdef USE_FRICTION
-        ccd_size = 0.6;
-#endif
 
         buildBVH_FULLCCD(temp_alpha);
         buildFullCP(temp_alpha);
@@ -10212,6 +10272,8 @@ int              GIPC::solve_subIP(device_TetraData& TetMesh,
 void GIPC::updateVelocities(device_TetraData& TetMesh)
 {
     int                numbers   = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateVelocities<<<blockNum, threadNum>>>(
@@ -10221,6 +10283,8 @@ void GIPC::updateVelocities(device_TetraData& TetMesh)
 void GIPC::updateBoundary(device_TetraData& TetMesh, double alpha)
 {
     int                numbers   = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateBoundary<<<blockNum, threadNum>>>(
@@ -10230,6 +10294,8 @@ void GIPC::updateBoundary(device_TetraData& TetMesh, double alpha)
 void GIPC::updateBoundaryMoveDir(device_TetraData& TetMesh, double alpha)
 {
     int                numbers   = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateBoundaryMoveDir<<<blockNum, threadNum>>>(
@@ -10239,6 +10305,8 @@ void GIPC::updateBoundaryMoveDir(device_TetraData& TetMesh, double alpha)
 void GIPC::updateBoundary2(device_TetraData& TetMesh)
 {
     int                numbers   = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateBoundary2<<<blockNum, threadNum>>>(TetMesh.BoundaryType, TetMesh.Constraints, numbers);
@@ -10247,6 +10315,8 @@ void GIPC::updateBoundary2(device_TetraData& TetMesh)
 void GIPC::computeXTilta(device_TetraData& TetMesh, const double& rate)
 {
     int                numbers   = vertexNum;
+    if(numbers < 1)
+        return;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _computeXTilta<<<blockNum, threadNum>>>(
