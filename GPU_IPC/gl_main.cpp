@@ -26,6 +26,7 @@
 #include "gipc_path.h"
 #include "math.h"
 #include <stdint.h>  
+#include <cstring>
 int              collision_detection_buff_scale = 1;
 double           motion_rate                    = 1;
 mesh_obj         obj;
