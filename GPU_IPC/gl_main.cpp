@@ -19,13 +19,13 @@
 #include "load_mesh.h"
 #include "cuda_tools.h"
 #include <queue>
-//#include "timer.h"
+#include <filesystem>
 #include "femEnergy.cuh"
 #include "gpu_eigen_libs.cuh"
 #include "fem_parameters.h"
 #include "gipc_path.h"
 #include "math.h"
-
+#include <stdint.h>  
 int              collision_detection_buff_scale = 1;
 double           motion_rate                    = 1;
 mesh_obj         obj;
@@ -91,42 +91,47 @@ void Init_CUDA()
     }
 }
 
-//typedef struct BITMAPFILEHEADER
-//{
-//    u_int16_t bfType;
-//    u_int32_t bfSize;
-//    u_int16_t bfReserved1;
-//    u_int16_t bfReserved2;
-//    u_int32_t bfOffBits;
-//}BITMAPFILEHEADER;
-//
-//typedef struct BITMAPINFOHEADER
-//{
-//    u_int32_t biSize;
-//    u_int32_t biWidth;
-//    u_int32_t biHeight;
-//    u_int16_t biPlanes;
-//    u_int16_t biBitCount;
-//    u_int32_t biCompression;
-//    u_int32_t biSizeImage;
-//    u_int32_t biXPelsPerMeter;
-//    u_int32_t biYPelsPerMeter;
-//    u_int32_t biClrUsed;
-//    u_int32_t biClrImportant;
-//}BITMAPINFODEADER;
+
+
+#pragma pack(push, 1)  
+typedef struct
+{
+    uint16_t bfType;       
+    uint32_t bfSize;       
+    uint16_t bfReserved1;  
+    uint16_t bfReserved2;  
+    uint32_t bfOffBits;    
+} mBITMAPFILEHEADER;
+#pragma pack(pop) 
+
+#pragma pack(push, 1) 
+typedef struct
+{
+    uint32_t biSize;       
+    int32_t  biWidth;      
+    int32_t  biHeight;     
+    uint16_t biPlanes;     
+    uint16_t biBitCount;   
+    uint32_t biCompression;
+    uint32_t biSizeImage;  
+    int32_t  biXPelsPerMeter;  
+    int32_t  biYPelsPerMeter;  
+    uint32_t biClrUsed;        
+    uint32_t biClrImportant;   
+} mBITMAPINFOHEADER;
+#pragma pack(pop) 
 
 bool WriteBitmapFile(int width, int height, const std::string& file_name, unsigned char* bitmapData)
 {
-#ifdef WIN32
-    BITMAPFILEHEADER bitmapFileHeader;
-    memset(&bitmapFileHeader, 0, sizeof(BITMAPFILEHEADER));
-    bitmapFileHeader.bfSize = sizeof(BITMAPFILEHEADER);
+    mBITMAPFILEHEADER bitmapFileHeader;
+    memset(&bitmapFileHeader, 0, sizeof(mBITMAPFILEHEADER));
+    bitmapFileHeader.bfSize = sizeof(mBITMAPFILEHEADER);
     bitmapFileHeader.bfType = 0x4d42;  //BM
-    bitmapFileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+    bitmapFileHeader.bfOffBits = sizeof(mBITMAPFILEHEADER) + sizeof(mBITMAPINFOHEADER);
 
-    BITMAPINFOHEADER bitmapInfoHeader;
-    memset(&bitmapInfoHeader, 0, sizeof(BITMAPINFOHEADER));
-    bitmapInfoHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    mBITMAPINFOHEADER bitmapInfoHeader;
+    memset(&bitmapInfoHeader, 0, sizeof(mBITMAPINFOHEADER));
+    bitmapInfoHeader.biSize        = sizeof(mBITMAPINFOHEADER);
     bitmapInfoHeader.biWidth       = width;
     bitmapInfoHeader.biHeight      = height;
     bitmapInfoHeader.biPlanes      = 1;
@@ -152,29 +157,24 @@ bool WriteBitmapFile(int width, int height, const std::string& file_name, unsign
         return false;
     }
 
-    fwrite(&bitmapFileHeader, sizeof(BITMAPFILEHEADER), 1, filePtr);
+    fwrite(&bitmapFileHeader, sizeof(mBITMAPFILEHEADER), 1, filePtr);
 
-    fwrite(&bitmapInfoHeader, sizeof(BITMAPINFOHEADER), 1, filePtr);
+    fwrite(&bitmapInfoHeader, sizeof(mBITMAPINFOHEADER), 1, filePtr);
 
     fwrite(bitmapData, bitmapInfoHeader.biSizeImage, 1, filePtr);
 
     fclose(filePtr);
-#endif
     return true;
 }
 
 void SaveScreenShot(int width, int height, const std::string& file_name)
 {
-#ifdef WIN32
     int   data_len    = height * width * 3;  // bytes
     void* screen_data = malloc(data_len);
     memset(screen_data, 0, data_len);
     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, screen_data);
-
     WriteBitmapFile(width, height, file_name + ".bmp", (unsigned char*)screen_data);
-
     free(screen_data);
-#endif
 }
 
 void saveSurfaceMesh(const string& path)
@@ -919,6 +919,10 @@ void display(void)
     //        saveSurfaceMesh("saveSurface/surf_");
     //        saveSurface = !saveSurface;
     //    }
+    
+
+    
+
 
     if(stop)
         return;
@@ -932,6 +936,10 @@ void display(void)
     //    CUDA_SAFE_CALL(cudaMemcpy(d_tetMesh.targetVert, tetMesh.targetPos.data(), tetMesh.softNum * sizeof(double3), cudaMemcpyHostToDevice));
     //}
 
+
+
+
+
     CUDA_SAFE_CALL(cudaMemcpy(
         &bvs[0], ipc.bvh_e._bvs, (2 * ipc.edge_Num - 1) * sizeof(AABB), cudaMemcpyDeviceToHost));
     CUDA_SAFE_CALL(cudaMemcpy(
@@ -944,8 +952,13 @@ void display(void)
 
     if(screenshot)
     {
+        auto output_path2 = std::string{gipc::output_dir()} + "saveScreen/";
+        std::filesystem::exists(output_path2)
+            || std::filesystem::create_directories(output_path2);
+        
         std::stringstream ss;
-        ss << "saveScreen/step_";
+        ss << output_path2;
+        ss << "step_";
         ss.fill('0');
         ss.width(5);
         ss << step / 1;
@@ -955,7 +968,14 @@ void display(void)
     step++;
     if(saveSurface)
     {
-        saveSurfaceMesh("saveSurface/surf_");
+        
+
+
+        auto output_path = std::string{gipc::output_dir()} + "saveSurface/";
+        std::filesystem::exists(output_path)
+            || std::filesystem::create_directories(output_path);
+
+        saveSurfaceMesh(output_path + "surf_");
         //saveSurface = !saveSurface;
     }
 
