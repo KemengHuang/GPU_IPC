@@ -1,6 +1,6 @@
 # Output/
 # but Output/Output.md shouldn't be ignored
-Output/
+Output/*
 *build/*
 !Output/Output.md
 
