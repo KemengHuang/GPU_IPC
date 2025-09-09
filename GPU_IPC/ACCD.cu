@@ -10,17 +10,17 @@
 #include "gpu_eigen_libs.cuh"
 #include <cmath>
 #include <stdio.h>
-template <class F>
-__device__ __host__
-inline F __m_max(F a, F b) {
-    return a > b ? a : b;
-}
-
-template <class F>
-__device__ __host__
-inline F __m_min(F a, F b) {
-    return a > b ? b : a;
-}
+//template <class F>
+//__device__ __host__
+//inline F __m_max(F a, F b) {
+//    return a > b ? a : b;
+//}
+//
+//template <class F>
+//__device__ __host__
+//inline F __m_min(F a, F b) {
+//    return a > b ? b : a;
+//}
 
 __device__
 int _dType_point_triangle(const double3& v0, const double3& v1, const double3& v2, const double3& v3)
@@ -284,7 +284,7 @@ double edge_edge_ccd(
     deb0 = __GEIGEN__::__add(deb0, mov);
     deb1 = __GEIGEN__::__add(deb1, mov);
 
-    double max_disp_mag = sqrt(__m_max(__GEIGEN__::__squaredNorm(dea0), __GEIGEN__::__squaredNorm(dea1))) + sqrt(__m_max(__GEIGEN__::__squaredNorm(deb0), __GEIGEN__::__squaredNorm(deb1)));
+    double max_disp_mag = sqrt(std::max(__GEIGEN__::__squaredNorm(dea0), __GEIGEN__::__squaredNorm(dea1))) + sqrt(std::max(__GEIGEN__::__squaredNorm(deb0), __GEIGEN__::__squaredNorm(deb1)));
     if (max_disp_mag == 0)
         return 1.0;
 
@@ -297,7 +297,7 @@ double edge_edge_ccd(
         double dists2 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(ea1, eb0));
         double dists3 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(ea1, eb1));
 
-        dist2_cur = __m_min(__m_min(dists0, dists1), __m_min(dists2, dists3));
+        dist2_cur = std::min(std::min(dists0, dists1), std::min(dists2, dists3));
         dFunc = dist2_cur - thickness * thickness;
     }
     double dist_cur = sqrt(dist2_cur);
@@ -324,7 +324,7 @@ double edge_edge_ccd(
             double dists2 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(ea1, eb0));
             double dists3 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(ea1, eb1));
             
-            dist2_cur = __m_min(__m_min(dists0, dists1), __m_min(dists2, dists3));
+            dist2_cur = std::min(std::min(dists0, dists1), std::min(dists2, dists3));
             dFunc = dist2_cur - thickness * thickness;
         }
         dist_cur = sqrt(dist2_cur);
@@ -365,7 +365,7 @@ double point_triangle_ccd(
     double disp_mag2_vec1 = __GEIGEN__::__squaredNorm(dt1);
     double disp_mag2_vec2 = __GEIGEN__::__squaredNorm(dt2);
 
-    double max_disp_mag = __GEIGEN__::__norm(dp) + sqrt(__m_max(disp_mag2_vec0, __m_max(disp_mag2_vec1, disp_mag2_vec2)));
+    double max_disp_mag = __GEIGEN__::__norm(dp) + sqrt(std::max(disp_mag2_vec0, std::max(disp_mag2_vec1, disp_mag2_vec2)));
     if (max_disp_mag == 0)
         return 1.0;
 

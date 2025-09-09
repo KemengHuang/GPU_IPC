@@ -11,18 +11,18 @@
 #include "gpu_eigen_libs.cuh"
 #include "cuda_tools.h"
 #include "device_utils.h"
-template <class F>
-__device__ __host__
-inline F __m_min(F a, F b) {
-    return a > b ? b : a;
-}
-
-
-template <class F>
-__device__ __host__
-inline F __m_max(F a, F b) {
-    return a > b ? a : b;
-}
+//template <class F>
+//__device__ __host__
+//inline F __m_min(F a, F b) {
+//    return a > b ? b : a;
+//}
+//
+//
+//template <class F>
+//__device__ __host__
+//inline F __m_max(F a, F b) {
+//    return a > b ? a : b;
+//}
 
 __global__ void PCG_vdv_Reduction(double* squeue, const double3* a, const double3* b, int numbers) {
     int idof = blockIdx.x * blockDim.x;
@@ -526,7 +526,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         unsigned int mark = gipc::WARP_BALLOT(bBoundary);
         mark = __brev(mark);
-        unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+        unsigned int interval = std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
 
         for (int iter = 1; iter < 12; iter <<= 1) {
             double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
@@ -566,7 +566,8 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         unsigned int mark = gipc::WARP_BALLOT(bBoundary); // a bit-mask 
         mark = __brev(mark);
-        unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+        unsigned int interval =
+            std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
 
         for (int iter = 1; iter < 9; iter <<= 1) {
             double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
@@ -606,7 +607,8 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         unsigned int mark = gipc::WARP_BALLOT(bBoundary);
         mark = __brev(mark);
-        unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+        unsigned int interval =
+            std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
 
         for (int iter = 1; iter < 6; iter <<= 1) {
             double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
@@ -667,7 +669,8 @@ __global__ void __PCG_Solve_AX12_b2(const __GEIGEN__::Matrix12x12d* Hessians, co
 
     unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
-    unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+    unsigned int interval =
+        std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
     //mark = interval;
     //for (int iter = 1; iter & 0x1f; iter <<= 1) {
     //    int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
@@ -746,7 +749,8 @@ __global__ void __PCG_Solve_AX12_b3(const __GEIGEN__::Matrix12x12d* Hessians, co
 
     unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
-    unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+    unsigned int interval =
+        std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
 
     for (int iter = 1; iter < 12; iter <<= 1) {
         double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
@@ -930,7 +934,8 @@ __global__ void __PCG_Solve_AX9_b2(const __GEIGEN__::Matrix9x9d* Hessians, const
 
     unsigned int mark = gipc::WARP_BALLOT(bBoundary); // a bit-mask 
     mark = __brev(mark);
-    unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+    unsigned int interval =
+        std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
     //mark = interval;
     //for (int iter = 1; iter & 0x1f; iter <<= 1) {
     //    int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
@@ -1028,7 +1033,7 @@ __global__ void __PCG_Solve_AX6_b2(const __GEIGEN__::Matrix6x6d* Hessians, const
 
     unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
-    unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+    unsigned int interval = std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
     //mark = interval;
     //for (int iter = 1; iter & 0x1f; iter <<= 1) {
     //    int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
@@ -1123,7 +1128,8 @@ __global__ void __PCG_Solve_AX3_b2(const __GEIGEN__::Matrix3x3d* Hessians, const
 
     unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
-    unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
+    unsigned int interval =
+        std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
     mark = interval;
     for (int iter = 1; iter & 0x1f; iter <<= 1) {
         int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
@@ -1515,7 +1521,7 @@ int PCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, 
 void PCG_Data::Malloc_DEVICE_MEM(const int& vertexNum, const int& tetrahedraNum) {
     //std::cout << vertexNum << std::endl;
     //int maxNum = __m_max(vertexNum, tetrahedraNum);
-    CUDA_SAFE_CALL(cudaMalloc((void**)&squeue, __m_max(vertexNum, tetrahedraNum) * sizeof(double)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&squeue, std::max(vertexNum, tetrahedraNum) * sizeof(double)));
     //CUDA_SAFE_CALL(cudaMalloc((void**)&b, vertexNum * sizeof(double3)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&P, vertexNum * sizeof(__GEIGEN__::Matrix3x3d)));
     CUDA_SAFE_CALL(cudaMalloc((void**)&r, vertexNum * sizeof(double3)));
