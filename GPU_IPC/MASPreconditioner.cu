@@ -19,6 +19,7 @@
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 #include "cooperative_groups.h"
+#include "device_utils.h"
 using namespace cooperative_groups;
 //#include "Eigen/Eigen"
 using namespace std;
@@ -105,7 +106,7 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
 
         unsigned int nextVist = __ffs(todo) - 1;
         visited |= (1U << nextVist);
-        connectMsk |= cacheMask[nextVist + localWarpId * BANKSIZE];  //__shfl(cacheMask, nextVist);//?????!!!!!
+        connectMsk |= cacheMask[nextVist + localWarpId * BANKSIZE];  //gipc::WARP_SHFL(cacheMask, nextVist);//?????!!!!!
     }
 
     _fineConnectedMsk[idx] = connectMsk;
@@ -115,7 +116,7 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
     if(electedPrefix == 0)
     {
         //prefixSum[warpId]++;
-        atomicAdd(prefixSum + localWarpId, 1);
+        gipc::ATOMIC_ADD(prefixSum + localWarpId, 1);
     }
 
     if(laneId == 0)
@@ -164,13 +165,13 @@ __global__ void _buildLevel1(int2*               _levelSize,
     //lanePrefix2 += _prefixSumOriginal[warpId];
 
     //unsigned int elected_lane = __ffs(connMsk) - 1;
-    //unsigned int theLanePrefix = __shfl(lanePrefix2, elected_lane);
+    //unsigned int theLanePrefix = gipc::WARP_SHFL(lanePrefix2, elected_lane);
 
     lanePrefix[threadIdx.x] = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     lanePrefix[threadIdx.x] += _prefixSumOriginal[warpId];
 
     unsigned int elected_lane = __ffs(connMsk) - 1;
-    unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //__shfl(lanePrefix, elected_lane);
+    unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //gipc::WARP_SHFL(lanePrefix, elected_lane);
 
 
     _coarseSpaceTable[idx + 0 * vertNum] = theLanePrefix;
@@ -281,7 +282,7 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
 
         visited |= (1U << nextVisit);
 
-        connMsk |= cachedMsk[nextVisit + localWarpId * BANKSIZE];  //__shfl(cachedMsk, nextVisit);
+        connMsk |= cachedMsk[nextVisit + localWarpId * BANKSIZE];  //gipc::WARP_SHFL(cachedMsk, nextVisit);
     }
 
     _nextConnectedMsk[idx] = connMsk;
@@ -290,7 +291,7 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
 
     if(electedPrefix == 0)
     {
-        atomicAdd(prefixSum + localWarpId, 1);
+        gipc::ATOMIC_ADD(prefixSum + localWarpId, 1);
     }
 
     if(laneId == 0)
@@ -339,7 +340,7 @@ __global__ void _prefixSumLx(int2*         _levelSize,
     lanePrefix[threadIdx.x] += _nextPrefixSum[warpId];
 
     unsigned int elected_lane = __ffs(connMsk) - 1;
-    unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //__shfl(lanePrefix, elected_lane);
+    unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //gipc::WARP_SHFL(lanePrefix, elected_lane);
 
     _nextConnectMsk[idx] = theLanePrefix;
     _goingNext[idx + levelBegin] =
@@ -374,7 +375,7 @@ __global__ void _aggregationKernel(
     {
         int next = _goingNext[currentId];
 
-        //int next0 = __shfl(next, 0);
+        //int next0 = gipc::WARP_SHFL(next, 0);
         ////printf("%d   %d   %d    %d\n", next, next0, l,  idx);
         //if (next == next0) {
         //  aggLevel = __mm_min(l, aggLevel);
@@ -447,7 +448,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         }
         //int cPid = vertCid / 32;
 
-        atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
+        gipc::ATOMIC_ADD(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                   Hval);
 
         while(level < levelNum - 1)
@@ -459,7 +460,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             if(vertCid / BANKSIZE == vertRid / BANKSIZE)
             {
 
-                atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
+                gipc::ATOMIC_ADD(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                           Hval);
             }
         }
@@ -500,7 +501,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         {
             return;
         }
-        atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
+        gipc::ATOMIC_ADD(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                   Hval);
 
         while(level < levelNum - 1)
@@ -511,7 +512,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             cPid    = vertCid / BANKSIZE;
             if(vertCid / BANKSIZE == vertRid / BANKSIZE)
             {
-                atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
+                gipc::ATOMIC_ADD(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                           Hval);
             }
         }
@@ -553,7 +554,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         {
             return;
         }
-        atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
+        gipc::ATOMIC_ADD(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                   Hval);
 
         while(level < levelNum - 1)
@@ -565,7 +566,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             if(vertCid / BANKSIZE == vertRid / BANKSIZE)
             {
 
-                atomicAdd(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
+                gipc::ATOMIC_ADD(&(P96[cPid].m[(vertRid % BANKSIZE) * 3 + roffset][(vertCid % BANKSIZE) * 3 + coffset]),
                           Hval);
             }
         }
@@ -588,7 +589,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         int level = 0;
 
 
-        atomicAdd(&(P96[cPid].m[Pod * 3 + qrid][Pod * 3 + qcid]), Hval);
+        gipc::ATOMIC_ADD(&(P96[cPid].m[Pod * 3 + qrid][Pod * 3 + qcid]), Hval);
 
         while(level < levelNum - 1)
         {
@@ -596,7 +597,7 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
             nodeIndex = _goingNext[nodeIndex];
             Pod       = nodeIndex % BANKSIZE;
             cPid      = nodeIndex / BANKSIZE;
-            atomicAdd(&(P96[cPid].m[Pod * 3 + qrid][Pod * 3 + qcid]), Hval);
+            gipc::ATOMIC_ADD(&(P96[cPid].m[Pod * 3 + qrid][Pod * 3 + qcid]), Hval);
         }
     }
 }
@@ -630,9 +631,9 @@ __global__ void __setMassMat_P96(const double*             _masses,
         idx = _goingNext[idx];
         Pid = idx / BANKSIZE;
         Pod = idx % BANKSIZE;
-        atomicAdd(&(_Mat96[Pid].m[Pod * 3][Pod * 3]), mass);
-        atomicAdd(&(_Mat96[Pid].m[Pod * 3 + 1][Pod * 3 + 1]), mass);
-        atomicAdd(&(_Mat96[Pid].m[Pod * 3 + 2][Pod * 3 + 2]), mass);
+        gipc::ATOMIC_ADD(&(_Mat96[Pid].m[Pod * 3][Pod * 3]), mass);
+        gipc::ATOMIC_ADD(&(_Mat96[Pid].m[Pod * 3 + 1][Pod * 3 + 1]), mass);
+        gipc::ATOMIC_ADD(&(_Mat96[Pid].m[Pod * 3 + 2][Pod * 3 + 2]), mass);
     }
 }
 
@@ -656,23 +657,23 @@ __global__ void __inverse2_P96x96(__GEIGEN__::Matrix96x96T*  PMas,
         PMas[matId].m[i][i] = 1;
     }
 
-    __syncthreads();
-    __threadfence();
+    gipc::SYNC_THREADS();
+    gipc::THREAD_FENCE();
 
     int         j = 0;
     Precision_T rt;
 
     while(j < (BANKSIZE * 3))
     {
-        __syncthreads();
-        __threadfence();
+        gipc::SYNC_THREADS();
+        gipc::THREAD_FENCE();
 
         rt = PMas[matId].m[j][j];
 
         colm[block_matId][i] = PMas[matId].m[i][j];
 
-        __syncthreads();
-        __threadfence();
+        gipc::SYNC_THREADS();
+        gipc::THREAD_FENCE();
         if(i == j)
         {
 
@@ -682,20 +683,20 @@ __global__ void __inverse2_P96x96(__GEIGEN__::Matrix96x96T*  PMas,
         {
             PMas[matId].m[i][j] = 0;
         }
-        __syncthreads();
-        __threadfence();
+        gipc::SYNC_THREADS();
+        gipc::THREAD_FENCE();
 
         PMas[matId].m[j][i] /= rt;
 
-        __syncthreads();
-        __threadfence();
+        gipc::SYNC_THREADS();
+        gipc::THREAD_FENCE();
         for(int k = 0; k < (BANKSIZE * 3); k++)
         {
             if(k != j)
             {
                 Precision_T rate = -colm[block_matId][k];
-                __syncthreads();
-                __threadfence();
+                gipc::SYNC_THREADS();
+                gipc::THREAD_FENCE();
 
                 PMas[matId].m[k][i] += rate * PMas[matId].m[j][i];
             }
@@ -703,14 +704,14 @@ __global__ void __inverse2_P96x96(__GEIGEN__::Matrix96x96T*  PMas,
 
         j++;
     }
-    __syncthreads();
-    __threadfence();
+    gipc::SYNC_THREADS();
+    gipc::THREAD_FENCE();
     if(i % 3 < 2)
         PMas[matId].m[i + 1][i] = PMas[matId].m[i][i + 1];
     else
         PMas[matId].m[i][i - 2] = PMas[matId].m[i - 2][i];
-    __syncthreads();
-    __threadfence();
+    gipc::SYNC_THREADS();
+    gipc::THREAD_FENCE();
 
 
     for(int j = 0; j < (BANKSIZE * 3); j++)
@@ -754,12 +755,12 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
             invP96[matId].m[j][i] = 0;
         }
     }
-    __syncthreads();
-    __threadfence();
+    gipc::SYNC_THREADS();
+    gipc::THREAD_FENCE();
     int         j  = 0;
     Precision_T rt = P96[matId].m[0][0];
-    __syncthreads();
-    __threadfence();
+    gipc::SYNC_THREADS();
+    gipc::THREAD_FENCE();
     while(/*loopId[localMatId]*/ j < 96)
     {
         if(i <= j)
@@ -767,15 +768,15 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
         if(i > j)
             P96[matId].m[j][i] /= rt;
 
-        __syncthreads();
-        __threadfence();
+        gipc::SYNC_THREADS();
+        gipc::THREAD_FENCE();
         for(int k = 0; k < 96; k++)
         {
             if(k != j)
             {
                 Precision_T rate = -P96[matId].m[k][j];
-                __syncthreads();
-                __threadfence();
+                gipc::SYNC_THREADS();
+                gipc::THREAD_FENCE();
                 if(i <= j)
                     invP96[matId].m[k][i] += rate * invP96[matId].m[j][i];
                 if(i > j)
@@ -783,8 +784,8 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
             }
         }
 
-        __syncthreads();
-        __threadfence();
+        gipc::SYNC_THREADS();
+        gipc::THREAD_FENCE();
         j++;
         rt = P96[matId].m[j][j];
     }
@@ -811,7 +812,7 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
 //          invP96[matId].m[j][i] = 0;
 //      }
 //  }
-//  __syncthreads();
+//  gipc::SYNC_THREADS();
 //  //__shared__ int loopId[3];
 //  //__shared__ double tempRate[3];
 //
@@ -821,7 +822,7 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
 //  //}
 //  int j = 0;
 //  Precision_T rt = P96[matId].m[0][0];
-//  __syncthreads();
+//  gipc::SYNC_THREADS();
 //  while (/*loopId[localMatId]*/j < 96) {
 //
 //      //const int j = loopId[localMatId];
@@ -832,12 +833,12 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
 //      if (i <= j) {
 //          invP96[matId].m[j][i] /= rt;
 //      }
-//      __syncthreads();
+//      gipc::SYNC_THREADS();
 //      Precision_T rate = -P96[matId].m[i][j];
 //      for (int k = 0; k < 96; k++) {
 //          if (i != j) {
 //
-//              //__syncthreads();
+//              //gipc::SYNC_THREADS();
 //              if (k <= i) {
 //                  invP96[matId].m[i][k] += rate * invP96[matId].m[j][k];
 //              }
@@ -847,14 +848,14 @@ __global__ void __inverse3_P96x96(__GEIGEN__::Matrix96x96T*  P96,
 //          }
 //      }
 //
-//      __syncthreads();
+//      gipc::SYNC_THREADS();
 //      //if (i == 0) {
 //      //  loopId[localMatId]++;
 //      //  tempRate[localMatId] = P96[matId].m[j + 1][j + 1];
 //      //}
 //      j++;
 //      rt = P96[matId].m[j][j];
-//      //__syncthreads();
+//      //gipc::SYNC_THREADS();
 //  }
 //}
 
@@ -888,9 +889,9 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
     {
         for(int iter = 1; iter < BANKSIZE; iter <<= 1)
         {
-            r.x += __shfl_down(r.x, iter);
-            r.y += __shfl_down(r.y, iter);
-            r.z += __shfl_down(r.z, iter);
+            r.x += gipc::WARP_SHFL_DOWN(r.x, iter);
+            r.y += gipc::WARP_SHFL_DOWN(r.y, iter);
+            r.z += gipc::WARP_SHFL_DOWN(r.z, iter);
         }
         //int level = 0;
 
@@ -900,9 +901,9 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
             {
                 level++;
                 idx = _goingNext[idx];
-                atomicAdd((&((_multiLR + idx)->x)), r.x);
-                atomicAdd((&((_multiLR + idx)->x) + 1), r.y);
-                atomicAdd((&((_multiLR + idx)->x) + 2), r.z);
+                gipc::ATOMIC_ADD((&((_multiLR + idx)->x)), r.x);
+                gipc::ATOMIC_ADD((&((_multiLR + idx)->x) + 1), r.y);
+                gipc::ATOMIC_ADD((&((_multiLR + idx)->x) + 2), r.z);
             }
         }
         return;
@@ -914,10 +915,10 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
         c_sumResidual[threadIdx.x]                         = 0;
         c_sumResidual[threadIdx.x + DEFAULT_BLOCKSIZE]     = 0;
         c_sumResidual[threadIdx.x + 2 * DEFAULT_BLOCKSIZE] = 0;
-        atomicAdd(c_sumResidual + localWarpId * BANKSIZE + elected_lane, r.x);
-        atomicAdd(c_sumResidual + localWarpId * BANKSIZE + elected_lane + DEFAULT_BLOCKSIZE,
+        gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane, r.x);
+        gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane + DEFAULT_BLOCKSIZE,
                   r.y);
-        atomicAdd(c_sumResidual + localWarpId * BANKSIZE + elected_lane + 2 * DEFAULT_BLOCKSIZE,
+        gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane + 2 * DEFAULT_BLOCKSIZE,
                   r.z);
 
         unsigned int electedPrefix = __popc(connectMsk & _LanemaskLt(laneId));
@@ -927,10 +928,10 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
             {
                 level++;
                 idx = _goingNext[idx];
-                atomicAdd((&((_multiLR + idx)->x)), c_sumResidual[threadIdx.x]);
-                atomicAdd((&((_multiLR + idx)->x) + 1),
+                gipc::ATOMIC_ADD((&((_multiLR + idx)->x)), c_sumResidual[threadIdx.x]);
+                gipc::ATOMIC_ADD((&((_multiLR + idx)->x) + 1),
                           c_sumResidual[threadIdx.x + DEFAULT_BLOCKSIZE]);
-                atomicAdd((&((_multiLR + idx)->x) + 2),
+                gipc::ATOMIC_ADD((&((_multiLR + idx)->x) + 2),
                           c_sumResidual[threadIdx.x + DEFAULT_BLOCKSIZE * 2]);
             }
         }
@@ -955,9 +956,9 @@ __global__ void __buildMultiLevelR(
     {
         level++;
         idx = _goingNext[idx];
-        atomicAdd((&((_multiLR + idx)->x)), r.x);
-        atomicAdd((&((_multiLR + idx)->x) + 1), r.y);
-        atomicAdd((&((_multiLR + idx)->x) + 2), r.z);
+        gipc::ATOMIC_ADD((&((_multiLR + idx)->x)), r.x);
+        gipc::ATOMIC_ADD((&((_multiLR + idx)->x) + 1), r.y);
+        gipc::ATOMIC_ADD((&((_multiLR + idx)->x) + 2), r.z);
     }
 }
 
@@ -1021,7 +1022,7 @@ __global__ void _schwarzLocalXSym3(const __GEIGEN__::MasMatrixSymf* Pred,
     {
         smR[threadIdx.x] = mR[vcid];
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     if(lvcid >= lvrid)
     {
@@ -1037,19 +1038,19 @@ __global__ void _schwarzLocalXSym3(const __GEIGEN__::MasMatrixSymf* Pred,
                 + Pred[Hid].M[index].m[1][r3id] * smR[lvcid].y
                 + Pred[Hid].M[index].m[2][r3id] * smR[lvcid].z;
     }
-    //__syncthreads();
+    //gipc::SYNC_THREADS();
     int  warpId    = threadIdx.x & 0x1f;
     int  landidx   = threadIdx.x % BANKSIZE;
     bool bBoundary = (landidx == 0) || (warpId == 0);
 
-    unsigned int mark     = __ballot(bBoundary);  // a bit-mask
+    unsigned int mark     = gipc::WARP_BALLOT(bBoundary);  // a bit-mask
     mark                  = __brev(mark);
     unsigned int interval = __mm_min(__clz(mark << (warpId + 1)), 31 - warpId);
 
     int maxSize = __mm_min(32, BANKSIZE);
     for(int iter = 1; iter < maxSize; iter <<= 1)
     {
-        Precision_TM tmpx = __shfl_down(rdata, iter);
+        Precision_TM tmpx = gipc::WARP_SHFL_DOWN(rdata, iter);
         if(interval >= iter)
         {
 
@@ -1059,7 +1060,7 @@ __global__ void _schwarzLocalXSym3(const __GEIGEN__::MasMatrixSymf* Pred,
 
     if(bBoundary)
     {
-        atomicAdd((&(mZ[vrid].x) + MRid % 3), rdata);
+        gipc::ATOMIC_ADD((&(mZ[vrid].x) + MRid % 3), rdata);
     }
 }
 

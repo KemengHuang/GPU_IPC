@@ -10,6 +10,7 @@
 #include "device_launch_parameters.h"
 #include "gpu_eigen_libs.cuh"
 #include "cuda_tools.h"
+#include "device_utils.h"
 template <class F>
 __device__ __host__
 inline F __m_min(F a, F b) {
@@ -48,19 +49,19 @@ __global__ void PCG_vdv_Reduction(double* squeue, const double3* a, const double
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -80,7 +81,7 @@ void add_reduction(double* mem, int numbers) {
     //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
     double temp = mem[idx];
 
-    __threadfence();
+    gipc::THREAD_FENCE();
 
     int warpTid = threadIdx.x % 32;
     int warpId = (threadIdx.x >> 5);
@@ -95,19 +96,19 @@ void add_reduction(double* mem, int numbers) {
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -146,19 +147,19 @@ __global__ void PCG_add_Reduction_delta0(double* squeue, const __GEIGEN__::Matri
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -199,19 +200,19 @@ __global__ void PCG_add_Reduction_deltaN0(double* squeue, const __GEIGEN__::Matr
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -257,19 +258,19 @@ __global__ void PCG_add_Reduction_deltaN(double* squeue, double3* dx, const doub
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -306,19 +307,19 @@ __global__ void PCG_add_Reduction_tempSum(double* squeue, const double3* c, doub
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -352,19 +353,19 @@ __global__ void PCG_add_Reduction_force(double* squeue, const double3* b, int nu
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
         temp = tep[threadIdx.x];
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if (threadIdx.x == 0) {
@@ -419,21 +420,21 @@ __global__ void __PCG_Solve_AX12_b(const __GEIGEN__::Matrix12x12d* Hessians, con
 
     tempQ = __GEIGEN__::__M12x12_v12_multiply(H, tempC);
 
-    atomicAdd(&(q[D4Index[idx].x].x), tempQ.v[0]);
-    atomicAdd(&(q[D4Index[idx].x].y), tempQ.v[1]);
-    atomicAdd(&(q[D4Index[idx].x].z), tempQ.v[2]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].x].x), tempQ.v[0]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].x].y), tempQ.v[1]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].x].z), tempQ.v[2]);
 
-    atomicAdd(&(q[D4Index[idx].y].x), tempQ.v[3]);
-    atomicAdd(&(q[D4Index[idx].y].y), tempQ.v[4]);
-    atomicAdd(&(q[D4Index[idx].y].z), tempQ.v[5]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].y].x), tempQ.v[3]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].y].y), tempQ.v[4]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].y].z), tempQ.v[5]);
 
-    atomicAdd(&(q[D4Index[idx].z].x), tempQ.v[6]);
-    atomicAdd(&(q[D4Index[idx].z].y), tempQ.v[7]);
-    atomicAdd(&(q[D4Index[idx].z].z), tempQ.v[8]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].z].x), tempQ.v[6]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].z].y), tempQ.v[7]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].z].z), tempQ.v[8]);
 
-    atomicAdd(&(q[D4Index[idx].w].x), tempQ.v[9]);
-    atomicAdd(&(q[D4Index[idx].w].y), tempQ.v[10]);
-    atomicAdd(&(q[D4Index[idx].w].z), tempQ.v[11]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].w].x), tempQ.v[9]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].w].y), tempQ.v[10]);
+    gipc::ATOMIC_ADD(&(q[D4Index[idx].w].z), tempQ.v[11]);
 }
 
 __global__ void __PCG_Solve_AX12_b1(const __GEIGEN__::Matrix12x12d* Hessians, const uint4* D4Index, const double3* c, double3* q, int numbers) {
@@ -454,7 +455,7 @@ __global__ void __PCG_Solve_AX12_b1(const __GEIGEN__::Matrix12x12d* Hessians, co
     if (threadIdx.x == 0) {
         offset = (12 - GRtid);
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int BRid = (threadIdx.x - offset + 12) / 12;
     int Num;// = 12 + BRid - GRtid;
@@ -482,12 +483,12 @@ __global__ void __PCG_Solve_AX12_b1(const __GEIGEN__::Matrix12x12d* Hessians, co
                     sData[threadIdx.x] += sData[threadIdx.x + iter];
             }
         }
-        __syncthreads();
-        //__threadfence();
+        gipc::SYNC_THREADS();
+        //gipc::THREAD_FENCE();
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x == 0 || GRtid == 0)
-        atomicAdd((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), sData[threadIdx.x]);
+        gipc::ATOMIC_ADD((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), sData[threadIdx.x]);
 }
 
 __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12, const __GEIGEN__::Matrix9x9d* Hessians9,
@@ -512,7 +513,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         if (threadIdx.x == 0) {
             offset = (12 - GRtid);
         }
-        __syncthreads();
+        gipc::SYNC_THREADS();
 
         int BRid = (threadIdx.x - offset + 12) / 12;
         int landidx = (threadIdx.x - offset) % 12;
@@ -523,17 +524,17 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         int warpId = threadIdx.x & 0x1f;
         bool bBoundary = (landidx == 0) || (warpId == 0);
 
-        unsigned int mark = __ballot(bBoundary);
+        unsigned int mark = gipc::WARP_BALLOT(bBoundary);
         mark = __brev(mark);
         unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
 
         for (int iter = 1; iter < 12; iter <<= 1) {
-            double tmp = __shfl_down(rdata, iter);
+            double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
             if (interval >= iter) rdata += tmp;
         }
 
         if (bBoundary)
-            atomicAdd((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+            gipc::ATOMIC_ADD((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
     }
     else if (blockIdx.x >= offset4 && blockIdx.x < offset4 + offset3) {
         int idx = (blockIdx.x - offset4) * blockDim.x + threadIdx.x;
@@ -552,7 +553,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         if (threadIdx.x == 0) {
             offset = (9 - GRtid);
         }
-        __syncthreads();
+        gipc::SYNC_THREADS();
 
         int BRid = (threadIdx.x - offset + 9) / 9;
         int landidx = (threadIdx.x - offset) % 9;
@@ -563,17 +564,17 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         int warpId = threadIdx.x & 0x1f;
         bool bBoundary = (landidx == 0) || (warpId == 0);
 
-        unsigned int mark = __ballot(bBoundary); // a bit-mask 
+        unsigned int mark = gipc::WARP_BALLOT(bBoundary); // a bit-mask 
         mark = __brev(mark);
         unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
 
         for (int iter = 1; iter < 9; iter <<= 1) {
-            double tmp = __shfl_down(rdata, iter);
+            double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
             if (interval >= iter) rdata += tmp;
         }
 
         if (bBoundary)
-            atomicAdd((&(q[*(&(D3Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+            gipc::ATOMIC_ADD((&(q[*(&(D3Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
     }
     else if (blockIdx.x >= offset4 + offset3 && blockIdx.x < offset4 + offset3 + offset2) {
         int idx = (blockIdx.x - offset4 - offset3) * blockDim.x + threadIdx.x;
@@ -592,7 +593,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         if (threadIdx.x == 0) {
             offset = (6 - GRtid);
         }
-        __syncthreads();
+        gipc::SYNC_THREADS();
 
         int BRid = (threadIdx.x - offset + 6) / 6;
         int landidx = (threadIdx.x - offset) % 6;
@@ -603,17 +604,17 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         int warpId = threadIdx.x & 0x1f;
         bool bBoundary = (landidx == 0) || (warpId == 0);
 
-        unsigned int mark = __ballot(bBoundary);
+        unsigned int mark = gipc::WARP_BALLOT(bBoundary);
         mark = __brev(mark);
         unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
 
         for (int iter = 1; iter < 6; iter <<= 1) {
-            double tmp = __shfl_down(rdata, iter);
+            double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
             if (interval >= iter) rdata += tmp;
         }
 
         if (bBoundary)
-            atomicAdd((&(q[*(&(D2Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+            gipc::ATOMIC_ADD((&(q[*(&(D2Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
     }
     else if (blockIdx.x >= offset4 + offset3 + offset2) {
         int idx = (blockIdx.x - offset4 - offset3 - offset2) * blockDim.x + threadIdx.x;
@@ -628,9 +629,9 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
 
         tempQ = __GEIGEN__::__M_v_multiply(H, tempC);
 
-        atomicAdd(&(q[D1Index[idx]].x), tempQ.x);
-        atomicAdd(&(q[D1Index[idx]].y), tempQ.y);
-        atomicAdd(&(q[D1Index[idx]].z), tempQ.z);
+        gipc::ATOMIC_ADD(&(q[D1Index[idx]].x), tempQ.x);
+        gipc::ATOMIC_ADD(&(q[D1Index[idx]].y), tempQ.y);
+        gipc::ATOMIC_ADD(&(q[D1Index[idx]].z), tempQ.z);
     }
 }
 
@@ -653,7 +654,7 @@ __global__ void __PCG_Solve_AX12_b2(const __GEIGEN__::Matrix12x12d* Hessians, co
     if (threadIdx.x == 0) {
         offset = (12 - GRtid);
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int BRid = (threadIdx.x - offset + 12) / 12;
     int landidx = (threadIdx.x - offset) % 12;
@@ -664,24 +665,24 @@ __global__ void __PCG_Solve_AX12_b2(const __GEIGEN__::Matrix12x12d* Hessians, co
     int warpId = threadIdx.x & 0x1f;
     bool bBoundary = (landidx == 0) || (warpId == 0);
 
-    unsigned int mark = __ballot(bBoundary);
+    unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
     unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
     //mark = interval;
     //for (int iter = 1; iter & 0x1f; iter <<= 1) {
-    //    int tmp = __shfl_down(mark, iter);
+    //    int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
     //    mark = tmp > mark ? tmp : mark; 
     //}
-    //mark = __shfl(mark, 0);
-    //__syncthreads();
+    //mark = gipc::WARP_SHFL(mark, 0);
+    //gipc::SYNC_THREADS();
 
     for (int iter = 1; iter < 12; iter <<= 1) {
-        double tmp = __shfl_down(rdata, iter);
+        double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
         if (interval >= iter) rdata += tmp;
     }
 
     if (bBoundary)
-        atomicAdd((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+        gipc::ATOMIC_ADD((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
 
 }
 
@@ -707,7 +708,7 @@ __global__ void __PCG_Solve_AX12_b3(const __GEIGEN__::Matrix12x12d* Hessians, co
         offset0 = (144 - HRtid);
         offset1 = (12 - GRtid);
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int HRid = (threadIdx.x - offset0 + 144) / 144;
     int Hlandidx = (threadIdx.x - offset0) % 144;
@@ -733,7 +734,7 @@ __global__ void __PCG_Solve_AX12_b3(const __GEIGEN__::Matrix12x12d* Hessians, co
         }
     }
 
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int readBid = landidx;
     if (offset0 > 12 && threadIdx.x < offset1)
@@ -743,17 +744,17 @@ __global__ void __PCG_Solve_AX12_b3(const __GEIGEN__::Matrix12x12d* Hessians, co
     int warpId = threadIdx.x & 0x1f;
     bool bBoundary = (landidx == 0) || (warpId == 0);
 
-    unsigned int mark = __ballot(bBoundary);
+    unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
     unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
 
     for (int iter = 1; iter < 12; iter <<= 1) {
-        double tmp = __shfl_down(rdata, iter);
+        double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
         if (interval >= iter) rdata += tmp;
     }
 
     if (bBoundary)
-        atomicAdd((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+        gipc::ATOMIC_ADD((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
 
 }
 
@@ -772,11 +773,11 @@ __global__ void __PCG_AXALL_P(const __GEIGEN__::Matrix12x12d* Hessians12, const 
         int tid = qid % 3;
 
         double Hval = Hessians12[Hid].m[mid][mid + tid];
-        atomicAdd(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
         Hval = Hessians12[Hid].m[mid + 1][mid + tid];
-        atomicAdd(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
         Hval = Hessians12[Hid].m[mid + 2][mid + tid];
-        atomicAdd(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
     }
     else if (numbers4 <= idx && idx < numbers3 + numbers4) {
         idx -= numbers4;
@@ -787,11 +788,11 @@ __global__ void __PCG_AXALL_P(const __GEIGEN__::Matrix12x12d* Hessians12, const 
         int tid = qid % 3;
 
         double Hval = Hessians9[Hid].m[mid][mid + tid];
-        atomicAdd(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
         Hval = Hessians9[Hid].m[mid + 1][mid + tid];
-        atomicAdd(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
         Hval = Hessians9[Hid].m[mid + 2][mid + tid];
-        atomicAdd(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
     }
     else if (numbers3 + numbers4 <= idx && idx < numbers3 + numbers4 + numbers2) {
         idx -= numbers3 + numbers4;
@@ -802,19 +803,19 @@ __global__ void __PCG_AXALL_P(const __GEIGEN__::Matrix12x12d* Hessians12, const 
         int tid = qid % 3;
 
         double Hval = Hessians6[Hid].m[mid][mid + tid];
-        atomicAdd(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
         Hval = Hessians6[Hid].m[mid + 1][mid + tid];
-        atomicAdd(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
         Hval = Hessians6[Hid].m[mid + 2][mid + tid];
-        atomicAdd(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
+        gipc::ATOMIC_ADD(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
     }
     else {
         idx -= numbers2 + numbers3 + numbers4;
         int Hid = idx / 3;
         int qid = idx % 3;
-        atomicAdd(&(P[D1Index[Hid]].m[0][qid]), Hessians3[Hid].m[0][qid]);
-        atomicAdd(&(P[D1Index[Hid]].m[1][qid]), Hessians3[Hid].m[1][qid]);
-        atomicAdd(&(P[D1Index[Hid]].m[2][qid]), Hessians3[Hid].m[2][qid]);
+        gipc::ATOMIC_ADD(&(P[D1Index[Hid]].m[0][qid]), Hessians3[Hid].m[0][qid]);
+        gipc::ATOMIC_ADD(&(P[D1Index[Hid]].m[1][qid]), Hessians3[Hid].m[1][qid]);
+        gipc::ATOMIC_ADD(&(P[D1Index[Hid]].m[2][qid]), Hessians3[Hid].m[2][qid]);
     }
 }
 
@@ -826,16 +827,16 @@ __global__ void __PCG_AX12_P(const __GEIGEN__::Matrix12x12d* Hessians, const uin
     int qid = idx % 12;
 
     //double Hval = Hessians[Hid].m[qid][qid];
-    //atomicAdd((&(P[*(&(D4Index[Hid].x) + qid / 3)].x) + qid % 3), Hval);
+    //gipc::ATOMIC_ADD((&(P[*(&(D4Index[Hid].x) + qid / 3)].x) + qid % 3), Hval);
     int mid = (qid / 3) * 3;
     int tid = qid % 3;
 
     double Hval = Hessians[Hid].m[mid][mid + tid];
-    atomicAdd(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
     Hval = Hessians[Hid].m[mid + 1][mid + tid];
-    atomicAdd(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
     Hval = Hessians[Hid].m[mid + 2][mid + tid];
-    atomicAdd(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D4Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
 }
 
 
@@ -862,17 +863,17 @@ __global__ void __PCG_Solve_AX9_b(const __GEIGEN__::Matrix9x9d* Hessians, const 
 
     tempQ = __GEIGEN__::__M9x9_v9_multiply(H, tempC);
 
-    atomicAdd(&(q[D3Index[idx].x].x), tempQ.v[0]);
-    atomicAdd(&(q[D3Index[idx].x].y), tempQ.v[1]);
-    atomicAdd(&(q[D3Index[idx].x].z), tempQ.v[2]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].x].x), tempQ.v[0]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].x].y), tempQ.v[1]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].x].z), tempQ.v[2]);
 
-    atomicAdd(&(q[D3Index[idx].y].x), tempQ.v[3]);
-    atomicAdd(&(q[D3Index[idx].y].y), tempQ.v[4]);
-    atomicAdd(&(q[D3Index[idx].y].z), tempQ.v[5]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].y].x), tempQ.v[3]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].y].y), tempQ.v[4]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].y].z), tempQ.v[5]);
 
-    atomicAdd(&(q[D3Index[idx].z].x), tempQ.v[6]);
-    atomicAdd(&(q[D3Index[idx].z].y), tempQ.v[7]);
-    atomicAdd(&(q[D3Index[idx].z].z), tempQ.v[8]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].z].x), tempQ.v[6]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].z].y), tempQ.v[7]);
+    gipc::ATOMIC_ADD(&(q[D3Index[idx].z].z), tempQ.v[8]);
 }
 
 __global__ void __PCG_AX9_P(const __GEIGEN__::Matrix9x9d* Hessians, const uint3* D3Index, __GEIGEN__::Matrix3x3d* P, int numbers) {
@@ -883,16 +884,16 @@ __global__ void __PCG_AX9_P(const __GEIGEN__::Matrix9x9d* Hessians, const uint3*
     int qid = idx % 9;
 
     //double Hval = Hessians[Hid].m[qid][qid];
-    //atomicAdd((&(P[*(&(D3Index[Hid].x) + qid / 3)].x) + qid % 3), Hval);
+    //gipc::ATOMIC_ADD((&(P[*(&(D3Index[Hid].x) + qid / 3)].x) + qid % 3), Hval);
     int mid = (qid / 3) * 3;
     int tid = qid % 3;
 
     double Hval = Hessians[Hid].m[mid][mid + tid];
-    atomicAdd(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
     Hval = Hessians[Hid].m[mid + 1][mid + tid];
-    atomicAdd(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
     Hval = Hessians[Hid].m[mid + 2][mid + tid];
-    atomicAdd(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D3Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
 }
 
 
@@ -916,7 +917,7 @@ __global__ void __PCG_Solve_AX9_b2(const __GEIGEN__::Matrix9x9d* Hessians, const
     if (threadIdx.x == 0) {
         offset = (9 - GRtid);// < 12 ? (12 - GRtid) : 0;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int BRid = (threadIdx.x - offset + 9) / 9;
     int landidx = (threadIdx.x - offset) % 9;
@@ -927,24 +928,24 @@ __global__ void __PCG_Solve_AX9_b2(const __GEIGEN__::Matrix9x9d* Hessians, const
     int warpId = threadIdx.x & 0x1f;
     bool bBoundary = (landidx == 0) || (warpId == 0);
 
-    unsigned int mark = __ballot(bBoundary); // a bit-mask 
+    unsigned int mark = gipc::WARP_BALLOT(bBoundary); // a bit-mask 
     mark = __brev(mark);
     unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
     //mark = interval;
     //for (int iter = 1; iter & 0x1f; iter <<= 1) {
-    //    int tmp = __shfl_down(mark, iter);
+    //    int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
     //    mark = tmp > mark ? tmp : mark; /*if (tmp > mark) mark = tmp;*/
     //}
-    //mark = __shfl(mark, 0);
-    //__syncthreads();
+    //mark = gipc::WARP_SHFL(mark, 0);
+    //gipc::SYNC_THREADS();
 
     for (int iter = 1; iter < 9; iter <<= 1) {
-        double tmp = __shfl_down(rdata, iter);
+        double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
         if (interval >= iter) rdata += tmp;
     }
 
     if (bBoundary)
-        atomicAdd((&(q[*(&(D3Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+        gipc::ATOMIC_ADD((&(q[*(&(D3Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
 }
 
 __global__ void __PCG_Solve_AX6_b(const __GEIGEN__::Matrix6x6d* Hessians, const uint2* D2Index, const double3* c, double3* q, int numbers) {
@@ -966,13 +967,13 @@ __global__ void __PCG_Solve_AX6_b(const __GEIGEN__::Matrix6x6d* Hessians, const 
 
     tempQ = __GEIGEN__::__M6x6_v6_multiply(H, tempC);
 
-    atomicAdd(&(q[D2Index[idx].x].x), tempQ.v[0]);
-    atomicAdd(&(q[D2Index[idx].x].y), tempQ.v[1]);
-    atomicAdd(&(q[D2Index[idx].x].z), tempQ.v[2]);
+    gipc::ATOMIC_ADD(&(q[D2Index[idx].x].x), tempQ.v[0]);
+    gipc::ATOMIC_ADD(&(q[D2Index[idx].x].y), tempQ.v[1]);
+    gipc::ATOMIC_ADD(&(q[D2Index[idx].x].z), tempQ.v[2]);
 
-    atomicAdd(&(q[D2Index[idx].y].x), tempQ.v[3]);
-    atomicAdd(&(q[D2Index[idx].y].y), tempQ.v[4]);
-    atomicAdd(&(q[D2Index[idx].y].z), tempQ.v[5]);
+    gipc::ATOMIC_ADD(&(q[D2Index[idx].y].x), tempQ.v[3]);
+    gipc::ATOMIC_ADD(&(q[D2Index[idx].y].y), tempQ.v[4]);
+    gipc::ATOMIC_ADD(&(q[D2Index[idx].y].z), tempQ.v[5]);
 }
 
 __global__ void __PCG_AX6_P(const __GEIGEN__::Matrix6x6d* Hessians, const uint2* D2Index, __GEIGEN__::Matrix3x3d* P, int numbers) {
@@ -983,16 +984,16 @@ __global__ void __PCG_AX6_P(const __GEIGEN__::Matrix6x6d* Hessians, const uint2*
     int qid = idx % 6;
 
     //double Hval = Hessians[Hid].m[qid][qid];
-    //atomicAdd((&(P[*(&(D2Index[Hid].x) + qid / 3)].x) + qid % 3), Hval);
+    //gipc::ATOMIC_ADD((&(P[*(&(D2Index[Hid].x) + qid / 3)].x) + qid % 3), Hval);
     int mid = (qid / 3) * 3;
     int tid = qid % 3;
 
     double Hval = Hessians[Hid].m[mid][mid + tid];
-    atomicAdd(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[0][qid % 3]), Hval);
     Hval = Hessians[Hid].m[mid + 1][mid + tid];
-    atomicAdd(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[1][qid % 3]), Hval);
     Hval = Hessians[Hid].m[mid + 2][mid + tid];
-    atomicAdd(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
+    gipc::ATOMIC_ADD(&(P[*(&(D2Index[Hid].x) + qid / 3)].m[2][qid % 3]), Hval);
 }
 
 
@@ -1014,7 +1015,7 @@ __global__ void __PCG_Solve_AX6_b2(const __GEIGEN__::Matrix6x6d* Hessians, const
     if (threadIdx.x == 0) {
         offset = (6 - GRtid);
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int BRid = (threadIdx.x - offset + 6) / 6;
     int landidx = (threadIdx.x - offset) % 6;
@@ -1025,24 +1026,24 @@ __global__ void __PCG_Solve_AX6_b2(const __GEIGEN__::Matrix6x6d* Hessians, const
     int warpId = threadIdx.x & 0x1f;
     bool bBoundary = (landidx == 0) || (warpId == 0);
 
-    unsigned int mark = __ballot(bBoundary);
+    unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
     unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
     //mark = interval;
     //for (int iter = 1; iter & 0x1f; iter <<= 1) {
-    //    int tmp = __shfl_down(mark, iter);
+    //    int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
     //    mark = tmp > mark ? tmp : mark; 
     //}
-    //mark = __shfl(mark, 0);
-    //__syncthreads();
+    //mark = gipc::WARP_SHFL(mark, 0);
+    //gipc::SYNC_THREADS();
 
     for (int iter = 1; iter < 6; iter <<= 1) {
-        double tmp = __shfl_down(rdata, iter);
+        double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
         if (interval >= iter) rdata += tmp;
     }
 
     if (bBoundary)
-        atomicAdd((&(q[*(&(D2Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
+        gipc::ATOMIC_ADD((&(q[*(&(D2Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
 }
 
 __global__ void __PCG_Update_Dx_R(const double3* c, double3* dx, const double3* q, double3* r, double rate, int numbers) {
@@ -1068,9 +1069,9 @@ __global__ void __PCG_Solve_AX3_b(const __GEIGEN__::Matrix3x3d* Hessians, const 
 
     tempQ = __GEIGEN__::__M_v_multiply(H, tempC);
 
-    atomicAdd(&(q[D1Index[idx]].x), tempQ.x);
-    atomicAdd(&(q[D1Index[idx]].y), tempQ.y);
-    atomicAdd(&(q[D1Index[idx]].z), tempQ.z);
+    gipc::ATOMIC_ADD(&(q[D1Index[idx]].x), tempQ.x);
+    gipc::ATOMIC_ADD(&(q[D1Index[idx]].y), tempQ.y);
+    gipc::ATOMIC_ADD(&(q[D1Index[idx]].z), tempQ.z);
 }
 
 __global__ void __PCG_AX3_P(const __GEIGEN__::Matrix3x3d* Hessians, const uint32_t* D1Index, __GEIGEN__::Matrix3x3d* P, int numbers) {
@@ -1085,9 +1086,9 @@ __global__ void __PCG_AX3_P(const __GEIGEN__::Matrix3x3d* Hessians, const uint32
     //P[D1Index[Hid]].m[0][qid] += Hessians[Hid].m[0][qid];
     //P[D1Index[Hid]].m[1][qid] += Hessians[Hid].m[1][qid];
     //P[D1Index[Hid]].m[2][qid] += Hessians[Hid].m[2][qid];
-    atomicAdd(&(P[D1Index[Hid]].m[0][qid]), Hessians[Hid].m[0][qid]);
-    atomicAdd(&(P[D1Index[Hid]].m[1][qid]), Hessians[Hid].m[1][qid]);
-    atomicAdd(&(P[D1Index[Hid]].m[2][qid]), Hessians[Hid].m[2][qid]);
+    gipc::ATOMIC_ADD(&(P[D1Index[Hid]].m[0][qid]), Hessians[Hid].m[0][qid]);
+    gipc::ATOMIC_ADD(&(P[D1Index[Hid]].m[1][qid]), Hessians[Hid].m[1][qid]);
+    gipc::ATOMIC_ADD(&(P[D1Index[Hid]].m[2][qid]), Hessians[Hid].m[2][qid]);
 }
 
 
@@ -1109,7 +1110,7 @@ __global__ void __PCG_Solve_AX3_b2(const __GEIGEN__::Matrix3x3d* Hessians, const
     if (threadIdx.x == 0) {
         offset = (3 - GRtid);
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
 
     int BRid = (threadIdx.x - offset + 3) / 3;
     int landidx = (threadIdx.x - offset) % 3;
@@ -1120,24 +1121,24 @@ __global__ void __PCG_Solve_AX3_b2(const __GEIGEN__::Matrix3x3d* Hessians, const
     int warpId = threadIdx.x & 0x1f;
     bool bBoundary = (landidx == 0) || (warpId == 0);
 
-    unsigned int mark = __ballot(bBoundary);
+    unsigned int mark = gipc::WARP_BALLOT(bBoundary);
     mark = __brev(mark);
     unsigned int interval = __m_min(__clz(mark << (warpId + 1)), 31 - warpId);
     mark = interval;
     for (int iter = 1; iter & 0x1f; iter <<= 1) {
-        int tmp = __shfl_down(mark, iter);
+        int tmp = gipc::WARP_SHFL_DOWN(mark, iter);
         mark = tmp > mark ? tmp : mark;
     }
-    mark = __shfl(mark, 0);
-    __syncthreads();
+    mark = gipc::WARP_SHFL(mark, 0);
+    gipc::SYNC_THREADS();
 
     for (int iter = 1; iter <= mark; iter <<= 1) {
-        double tmp = __shfl_down(rdata, iter);
+        double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
         if (interval >= iter) rdata += tmp;
     }
 
     if (bBoundary)
-        atomicAdd((&(q[(D1Index[Hid])].x) + MRid % 3), rdata);
+        gipc::ATOMIC_ADD((&(q[(D1Index[Hid])].x) + MRid % 3), rdata);
 }
 
 
@@ -1150,9 +1151,9 @@ __global__ void __PCG_Solve_AX_mass_b(const double* _masses, const double3* c, d
 
     q[idx] = tempQ;
 
-    //atomicAdd(&(q[idx].x), tempQ.x);
-    //atomicAdd(&(q[idx].y), tempQ.y);
-    //atomicAdd(&(q[idx].z), tempQ.z);
+    //gipc::ATOMIC_ADD(&(q[idx].x), tempQ.x);
+    //gipc::ATOMIC_ADD(&(q[idx].y), tempQ.y);
+    //gipc::ATOMIC_ADD(&(q[idx].z), tempQ.z);
 }
 
 

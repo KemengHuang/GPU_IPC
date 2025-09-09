@@ -15,7 +15,7 @@
 #include<iostream>
 #include<fstream>
 #include "gpu_eigen_libs.cuh"
-
+#include "device_utils.h"
 template <class F>
 __device__ __host__
 inline F __m_min(F a, F b) {
@@ -433,10 +433,10 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PP(v0, v1, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);         
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);         
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, -1, -1);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
         }
         break;
     }
@@ -445,10 +445,10 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PP(v0, v2, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);         
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);         
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id2, -1, -1);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
         }
         break;
     }
@@ -457,10 +457,10 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PP(v0, v3, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id3, -1, -1);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
         }
         break;
     }
@@ -469,10 +469,10 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PE(v0, v1, v2, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, -1);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
         }
         break;
     }
@@ -481,10 +481,10 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PE(v0, v2, v3, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id2, id3, -1);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
         }
         break;
     }
@@ -493,10 +493,10 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PE(v0, v3, v1, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id3, id1, -1);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
         }
         break;
     }
@@ -505,11 +505,11 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
         _d_PT(v0, v1, v2, v3, d);
         if (d < dHat) {
             //printf("%d   %d   %d   %d   %d   %f\n", dtype, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, d);
-            int cdp_idx = atomicAdd(_cpNum, 1);
+            int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
             _ccd_collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             _collisionPair[cdp_idx] = make_int4(-id0 - 1, id1, id2, id3);
             //printf("ccbcbcbcbbcbcbbcbcb  %d  %d  %d  %d\n", -id0 - 1, id1, id2, id3);
-            _mInx[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+            _mInx[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
         }
         break;
     }
@@ -541,7 +541,7 @@ inline bool _checkPTintersection_fullCCD(const double3* _vertexes, const uint32_
         return;
     }
 
-    _ccd_collisionPair[atomicAdd(_cpNum, 1)] = make_int4(-id0 - 1, id1, id2, id3);
+    _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-id0 - 1, id1, id2, id3);
 }
 
 __device__
@@ -567,22 +567,22 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
             add_e = (eeSqureNCross < eps_x) ? -obj_idx - 2 : -1;
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id0 - 1, -id2 - 1, -id1 - 1, -id3 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id0 - 1, id2, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id0 - 1, id2, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
         }
         break;
@@ -597,21 +597,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
             add_e = (eeSqureNCross < eps_x) ? -obj_idx - 2 : -1;
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id0 - 1, -id3 - 1, -id1 - 1, -id2 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id0 - 1, id3, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id0 - 1, id3, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
         }
         break;
@@ -627,21 +627,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
 
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id0 - 1, -id2 - 1, id3, -id1 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id0 - 1, id2, id3, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id0 - 1, id2, id3, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
         }
         break;
@@ -656,21 +656,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
             add_e = (eeSqureNCross < eps_x) ? -obj_idx - 2 : -1;
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id1 - 1, -id2 - 1, -id0 - 1, -id3 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id1 - 1, id2, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id1 - 1, id2, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
         }
         break;
@@ -685,21 +685,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
             add_e = (eeSqureNCross < eps_x) ? -obj_idx - 2 : -1;
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id1 - 1, -id3 - 1, -id0 - 1, -id2 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id1 - 1, id3, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id1 - 1, id3, -1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 2, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             }
         }
         break;
@@ -714,21 +714,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
             add_e = (eeSqureNCross < eps_x) ? -obj_idx - 2 : -1;
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id1 - 1, -id2 - 1, id3, -id0 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id1 - 1, id2, id3, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id1 - 1, id2, id3, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
         }
         break;
@@ -744,21 +744,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
 
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id2 - 1, -id0 - 1, id1, -id3 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id2 - 1, id0, id1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id2 - 1, id0, id1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
         }
         break;
@@ -774,21 +774,21 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
 
 
             if (add_e <= -2) {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {
                     _collisionPair[cdp_idx] = make_int4(-id3 - 1, -id0 - 1, id1, -id2 - 1);
-                    MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                    MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                     break;
                 }
                 _collisionPair[cdp_idx] = make_int4(-id3 - 1, id0, id1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
             else {
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(-id3 - 1, id0, id1, add_e);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 3, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             }
         }
         break;
@@ -804,8 +804,8 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
         if (d < dHat) {
             if (add_e <= -2) {
                 //printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxx\n");
-                int cdp_idx = atomicAdd(_cpNum, 1);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 if (smooth) {                  
                     _collisionPair[cdp_idx] = make_int4(id0, id1, id2, -id3 - 1);
@@ -815,10 +815,10 @@ inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_
             }
             else {
 
-                int cdp_idx = atomicAdd(_cpNum, 1);
+                int cdp_idx = gipc::ATOMIC_ADD(_cpNum, 1);
                 _ccd_collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
                 _collisionPair[cdp_idx] = make_int4(id0, id1, id2, id3);
-                MatIndex[cdp_idx] = atomicAdd(_cpNum + 4, 1);
+                MatIndex[cdp_idx] = gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             }
         }
@@ -841,7 +841,7 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
     //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
     AABB temp = _leafBoxes[idx];
 
-    __threadfence();
+    gipc::THREAD_FENCE();
 
     double xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
     double xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
@@ -862,8 +862,8 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
         warpNum = ((blockDim.x) >> 5);
     }
     for (int i = 1; i < tidNum; i = (i << 1)) {
-        temp.combines(__shfl_down(xmin, i), __shfl_down(ymin, i), __shfl_down(zmin, i),
-            __shfl_down(xmax, i), __shfl_down(ymax, i), __shfl_down(zmax, i));
+        temp.combines(gipc::WARP_SHFL_DOWN(xmin, i), gipc::WARP_SHFL_DOWN(ymin, i), gipc::WARP_SHFL_DOWN(zmin, i),
+            gipc::WARP_SHFL_DOWN(xmax, i), gipc::WARP_SHFL_DOWN(ymax, i), gipc::WARP_SHFL_DOWN(zmax, i));
         if (warpTid + i < tidNum) {
             xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
             xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
@@ -872,7 +872,7 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
     if (warpTid == 0) {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if (threadIdx.x >= warpNum) return;
     if (warpNum > 1) {
         //	tidNum = warpNum;
@@ -881,8 +881,8 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
         xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
         //	warpNum = ((tidNum + 31) >> 5);
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp.combines(__shfl_down(xmin, i), __shfl_down(ymin, i), __shfl_down(zmin, i),
-                __shfl_down(xmax, i), __shfl_down(ymax, i), __shfl_down(zmax, i));
+            temp.combines(gipc::WARP_SHFL_DOWN(xmin, i), gipc::WARP_SHFL_DOWN(ymin, i), gipc::WARP_SHFL_DOWN(zmin, i),
+                gipc::WARP_SHFL_DOWN(xmax, i), gipc::WARP_SHFL_DOWN(ymax, i), gipc::WARP_SHFL_DOWN(zmax, i));
             if (threadIdx.x + i < warpNum) {
                 xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
                 xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
@@ -1018,7 +1018,7 @@ void _calcInternalAABB(const Node* _nodes, AABB* _bvs, uint32_t* flags, int numb
         const AABB rbox = _bvs[ridx];
         _bvs[parent] = merge(lbox, rbox);
 
-        __threadfence();
+        gipc::THREAD_FENCE();
 
         parent = _nodes[parent].parent_idx;
 
@@ -1123,7 +1123,7 @@ void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double
             {
                 if(!(_btype[idx]>=2&& _btype[_faces[obj_idx].x] >= 2 && _btype[_faces[obj_idx].y] >= 2 && _btype[_faces[obj_idx].z] >= 2))
                     if (idx != _faces[obj_idx].x && idx != _faces[obj_idx].y && idx != _faces[obj_idx].z) {
-                        _ccd_collisionPair[atomicAdd(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
+                        _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
                         //_checkPTintersection_fullCCD(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, _ccd_collisionPair);
                     }
             }
@@ -1139,7 +1139,7 @@ void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double
             {
                 if(!(_btype[idx]>=2&& _btype[_faces[obj_idx].x] >= 2 && _btype[_faces[obj_idx].y] >= 2 && _btype[_faces[obj_idx].z] >= 2))
                     if (idx != _faces[obj_idx].x && idx != _faces[obj_idx].y && idx != _faces[obj_idx].z) {
-                        _ccd_collisionPair[atomicAdd(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
+                        _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
                         //_checkPTintersection_fullCCD(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, _ccd_collisionPair);
                     }
             }
@@ -1247,7 +1247,7 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
                 if (self_eid != obj_idx) {
                     if (!(_btype[_edges[self_eid].x] >= 2 && _btype[_edges[self_eid].y] >= 2 && _btype[_edges[obj_idx].x] >= 2 && _btype[_edges[obj_idx].y] >= 2))
                         if (!(current_edge.x == _edges[obj_idx].x || current_edge.x == _edges[obj_idx].y || current_edge.y == _edges[obj_idx].x || current_edge.y == _edges[obj_idx].y || obj_idx < self_eid)) {
-                            _ccd_collisionPair[atomicAdd(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
+                            _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
                         }
                 }
             }
@@ -1264,7 +1264,7 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
                 if (self_eid != obj_idx) {
                     if (!(_btype[_edges[self_eid].x] >= 2 && _btype[_edges[self_eid].y] >= 2 && _btype[_edges[obj_idx].x] >= 2 && _btype[_edges[obj_idx].y] >= 2))
                         if (!(current_edge.x == _edges[obj_idx].x || current_edge.x == _edges[obj_idx].y || current_edge.y == _edges[obj_idx].x || current_edge.y == _edges[obj_idx].y || obj_idx < self_eid)) {
-                            _ccd_collisionPair[atomicAdd(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
+                            _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
                         }
                 }
             }

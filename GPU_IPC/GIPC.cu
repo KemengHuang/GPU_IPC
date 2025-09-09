@@ -25,7 +25,7 @@
 #include "zensim/geometry/SpatialQuery.hpp"
 #include "zensim/math/matrix/Eigen.hpp"
 #include "zensim/math/MathUtils.h"
-
+#include "device_utils.h"
 using namespace Eigen;
 
 #define RANK 2
@@ -321,14 +321,14 @@ __global__ void _reduct_max_double3_to_double(const double3* _double3Dim, double
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_max(temp, tempMin);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -339,7 +339,7 @@ __global__ void _reduct_max_double3_to_double(const double3* _double3Dim, double
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_max(temp, tempMin);
         }
     }
@@ -361,7 +361,7 @@ __global__ void _reduct_min_double(double* _double1Dim, int number)
     //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
     double temp = _double1Dim[idx];
 
-    __threadfence();
+    gipc::THREAD_FENCE();
 
 
     int    warpTid = threadIdx.x % 32;
@@ -380,14 +380,14 @@ __global__ void _reduct_min_double(double* _double1Dim, int number)
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_min(temp, tempMin);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -398,7 +398,7 @@ __global__ void _reduct_min_double(double* _double1Dim, int number)
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_min(temp, tempMin);
         }
     }
@@ -420,7 +420,7 @@ __global__ void _reduct_M_double2(double2* _double2Dim, int number)
     //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
     double2 temp = _double2Dim[idx];
 
-    __threadfence();
+    gipc::THREAD_FENCE();
 
 
     int    warpTid = threadIdx.x % 32;
@@ -439,8 +439,8 @@ __global__ void _reduct_M_double2(double2* _double2Dim, int number)
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp.x, i);
-        double tempMax = __shfl_down(temp.y, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
+        double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
         temp.x         = __m_max(temp.x, tempMin);
         temp.y         = __m_max(temp.y, tempMax);
     }
@@ -448,7 +448,7 @@ __global__ void _reduct_M_double2(double2* _double2Dim, int number)
     {
         sdata[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -459,8 +459,8 @@ __global__ void _reduct_M_double2(double2* _double2Dim, int number)
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp.x, i);
-            double tempMax = __shfl_down(temp.y, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
+            double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
             temp.x         = __m_max(temp.x, tempMin);
             temp.y         = __m_max(temp.y, tempMax);
         }
@@ -483,7 +483,7 @@ __global__ void _reduct_max_double(double* _double1Dim, int number)
     //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
     double temp = _double1Dim[idx];
 
-    __threadfence();
+    gipc::THREAD_FENCE();
 
 
     int    warpTid = threadIdx.x % 32;
@@ -502,14 +502,14 @@ __global__ void _reduct_max_double(double* _double1Dim, int number)
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMax = __shfl_down(temp, i);
+        double tempMax = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_max(temp, tempMax);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -520,7 +520,7 @@ __global__ void _reduct_max_double(double* _double1Dim, int number)
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMax = __shfl_down(temp, i);
+            double tempMax = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_max(temp, tempMax);
         }
     }
@@ -1370,7 +1370,7 @@ __global__ void _calFrictionHessian(const double3* _vertexes,
         __GEIGEN__::Matrix12x12d HessianBlock =
             __GEIGEN__::__s_M12x12_Multiply(__M12x2_M12x2T_Multiply(TM2, T),
                                             coef * lastH[idx]);
-        int Hidx = atomicAdd(_cpNum + 4, 1);
+        int Hidx = gipc::ATOMIC_ADD(_cpNum + 4, 1);
         Hidx += offset4;
         H12x12[Hidx]  = HessianBlock;
         D4Index[Hidx] = make_uint4(MMCVIDI.x, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -1455,7 +1455,7 @@ __global__ void _calFrictionHessian(const double3* _vertexes,
                 __GEIGEN__::__s_M6x6_Multiply(__M6x2_M6x2T_Multiply(TM2, T),
                                               coef * lastH[idx]);
 
-            int Hidx = atomicAdd(_cpNum + 2, 1);
+            int Hidx = gipc::ATOMIC_ADD(_cpNum + 2, 1);
             Hidx += offset2;
             H6x6[Hidx]    = HessianBlock;
             D2Index[Hidx] = make_uint2(MMCVIDI.x, MMCVIDI.y);
@@ -1538,7 +1538,7 @@ __global__ void _calFrictionHessian(const double3* _vertexes,
             __GEIGEN__::Matrix9x9d HessianBlock =
                 __GEIGEN__::__s_M9x9_Multiply(__M9x2_M9x2T_Multiply(TM2, T),
                                               coef * lastH[idx]);
-            int Hidx = atomicAdd(_cpNum + 3, 1);
+            int Hidx = gipc::ATOMIC_ADD(_cpNum + 3, 1);
             Hidx += offset3;
             H9x9[Hidx]    = HessianBlock;
             D3Index[Hidx] = make_uint3(v0I, MMCVIDI.y, MMCVIDI.z);
@@ -1624,7 +1624,7 @@ __global__ void _calFrictionHessian(const double3* _vertexes,
             __GEIGEN__::Matrix12x12d HessianBlock =
                 __GEIGEN__::__s_M12x12_Multiply(__M12x2_M12x2T_Multiply(TM2, T),
                                                 coef * lastH[idx]);
-            int Hidx = atomicAdd(_cpNum + 4, 1);
+            int Hidx = gipc::ATOMIC_ADD(_cpNum + 4, 1);
             Hidx += offset4;
             H12x12[Hidx]  = HessianBlock;
             D4Index[Hidx] = make_uint4(v0I, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -1836,7 +1836,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
             __GEIGEN__::Matrix12x12d Hessian = __GEIGEN__::__M12x9_M9x12_Multiply(
                 __GEIGEN__::__M12x9_M9x9_Multiply(PFPxTransPos, H), PFPx);
 #endif
-            int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+            int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             H12x12[Hidx] = Hessian;
             D4Index[Hidx] = make_uint4(MMCVIDI.x, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -2070,7 +2070,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
             //__GEIGEN__::Matrix9x12d PFPxTransPos = __GEIGEN__::__Transpose12x9(PFPx);
             __GEIGEN__::Matrix12x12d Hessian;  // = __GEIGEN__::__M12x9_M9x12_Multiply(__GEIGEN__::__M12x9_M9x9_Multiply(PFPx, projectedH), PFPxTransPos);
             __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPx, projectedH, Hessian);
-            int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+            int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             H12x12[Hidx] = Hessian;
             D4Index[Hidx] = make_uint4(MMCVIDI.x, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -2308,7 +2308,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
                 //__GEIGEN__::Matrix9x12d PFPxTransPos = __GEIGEN__::__Transpose12x9(PFPx);
                 __GEIGEN__::Matrix12x12d Hessian;  // = __GEIGEN__::__M12x9_M9x12_Multiply(__GEIGEN__::__M12x9_M9x9_Multiply(PFPx, projectedH), PFPxTransPos);
                 __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPx, projectedH, Hessian);
-                int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+                int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
                 H12x12[Hidx] = Hessian;
                 D4Index[Hidx] =
@@ -2462,7 +2462,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
                 __GEIGEN__::Matrix6x6d Hessian = __GEIGEN__::__M6x3_M3x6_Multiply(
                     __GEIGEN__::__M6x3_M3x3_Multiply(PFPxTransPos, H), PFPx);
 #endif
-                int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+                int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
                 H6x6[Hidx]    = Hessian;
                 D2Index[Hidx] = make_uint2(v0I, MMCVIDI.y);
@@ -2698,7 +2698,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
                 //__GEIGEN__::Matrix9x12d PFPxTransPos = __GEIGEN__::__Transpose12x9(PFPx);
                 __GEIGEN__::Matrix12x12d Hessian;  // = __GEIGEN__::__M12x9_M9x12_Multiply(__GEIGEN__::__M12x9_M9x9_Multiply(PFPx, projectedH), PFPxTransPos);
                 __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPx, projectedH, Hessian);
-                int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+                int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
                 H12x12[Hidx] = Hessian;
                 D4Index[Hidx] =
@@ -2897,7 +2897,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
                 __GEIGEN__::Matrix9x9d Hessian = __GEIGEN__::__M9x6_M6x9_Multiply(
                     __GEIGEN__::__M9x6_M6x6_Multiply(PFPxTransPos, H), PFPx);
 #endif
-                int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+                int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
                 H9x9[Hidx]    = Hessian;
                 D3Index[Hidx] = make_uint3(v0I, MMCVIDI.y, MMCVIDI.z);
@@ -3075,7 +3075,7 @@ __global__ void _calBarrierHessian(const double3*            _vertexes,
                 __GEIGEN__::__M12x9_M9x9_Multiply(PFPxTransPos, H), PFPx);
 #endif
 
-            int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+            int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             H12x12[Hidx]  = H2;
             D4Index[Hidx] = make_uint4(v0I, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -3330,20 +3330,20 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
 #endif
 
             {
-                atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
             }
-            int Hidx = matIndex[idx];  //atomicAdd(_cpNum + 4, 1);
+            int Hidx = matIndex[idx];  //gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             H12x12[Hidx] = Hessian;
             D4Index[Hidx] = make_uint4(MMCVIDI.x, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -3440,18 +3440,18 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 __GEIGEN__::__M12x9_v9_multiply(PFPx, flatten_pk1);
 
             {
-                atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
             }
 
 #if(RANK == 1)
@@ -3616,7 +3616,7 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
             //__GEIGEN__::Matrix9x12d PFPxTransPos = __GEIGEN__::__Transpose12x9(PFPx);
             __GEIGEN__::Matrix12x12d Hessian;  // = __GEIGEN__::__M12x9_M9x12_Multiply(__GEIGEN__::__M12x9_M9x9_Multiply(PFPx, projectedH), PFPxTransPos);
             __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPx, projectedH, Hessian);
-            int Hidx = matIndex[idx];  //int Hidx = atomicAdd(_cpNum + 4, 1);
+            int Hidx = matIndex[idx];  //int Hidx = gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             H12x12[Hidx] = Hessian;
             D4Index[Hidx] = make_uint4(MMCVIDI.x, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -3718,18 +3718,18 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                     __GEIGEN__::__M12x9_v9_multiply(PFPx, flatten_pk1);
 
                 {
-                    atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
                 }
 
 #if(RANK == 1)
@@ -3894,7 +3894,7 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 //__GEIGEN__::Matrix9x12d PFPxTransPos = __GEIGEN__::__Transpose12x9(PFPx);
                 __GEIGEN__::Matrix12x12d Hessian;  // = __GEIGEN__::__M12x9_M9x12_Multiply(__GEIGEN__::__M12x9_M9x9_Multiply(PFPx, projectedH), PFPxTransPos);
                 __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPx, projectedH, Hessian);
-                int Hidx = matIndex[idx];  //int Hidx = atomicAdd(_cpNum + 4, 1);
+                int Hidx = matIndex[idx];  //int Hidx = gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
                 H12x12[Hidx] = Hessian;
                 D4Index[Hidx] =
@@ -4044,12 +4044,12 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
 
 
                 {
-                    atomicAdd(&(_gradient[v0I].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[v0I].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[v0I].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
                 }
 
 #if(RANK == 1)
@@ -4135,7 +4135,7 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 __GEIGEN__::Matrix6x6d Hessian = __GEIGEN__::__M6x3_M3x6_Multiply(
                     __GEIGEN__::__M6x3_M3x3_Multiply(PFPxTransPos, H), PFPx);
 #endif
-                int Hidx = matIndex[idx];  //int Hidx = atomicAdd(_cpNum + 2, 1);
+                int Hidx = matIndex[idx];  //int Hidx = gipc::ATOMIC_ADD(_cpNum + 2, 1);
 
                 H6x6[Hidx]    = Hessian;
                 D2Index[Hidx] = make_uint2(v0I, MMCVIDI.y);
@@ -4236,18 +4236,18 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                     __GEIGEN__::__M12x9_v9_multiply(PFPx, flatten_pk1);
 
                 {
-                    atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
                 }
 
 #if(RANK == 1)
@@ -4412,7 +4412,7 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 //__GEIGEN__::Matrix9x12d PFPxTransPos = __GEIGEN__::__Transpose12x9(PFPx);
                 __GEIGEN__::Matrix12x12d Hessian;  // = __GEIGEN__::__M12x9_M9x12_Multiply(__GEIGEN__::__M12x9_M9x9_Multiply(PFPx, projectedH), PFPxTransPos);
                 __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPx, projectedH, Hessian);
-                int Hidx = matIndex[idx];  //int Hidx = atomicAdd(_cpNum + 4, 1);
+                int Hidx = matIndex[idx];  //int Hidx = gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
                 H12x12[Hidx] = Hessian;
                 D4Index[Hidx] =
@@ -4603,15 +4603,15 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
 #endif
 
                 {
-                    atomicAdd(&(_gradient[v0I].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[v0I].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[v0I].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
                 }
 
 #if(RANK == 1)
@@ -4704,7 +4704,7 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 __GEIGEN__::Matrix9x9d Hessian = __GEIGEN__::__M9x6_M6x9_Multiply(
                     __GEIGEN__::__M9x6_M6x6_Multiply(PFPxTransPos, H), PFPx);
 #endif
-                int Hidx = matIndex[idx];  //int Hidx = atomicAdd(_cpNum + 3, 1);
+                int Hidx = matIndex[idx];  //int Hidx = gipc::ATOMIC_ADD(_cpNum + 3, 1);
 
                 H9x9[Hidx]    = Hessian;
                 D3Index[Hidx] = make_uint3(v0I, MMCVIDI.y, MMCVIDI.z);
@@ -4912,18 +4912,18 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 __GEIGEN__::__M12x9_v9_multiply(__GEIGEN__::__Transpose9x12(PFPx), flatten_pk1);
 #endif
 
-            atomicAdd(&(_gradient[v0I].x), gradient_vec.v[0]);
-            atomicAdd(&(_gradient[v0I].y), gradient_vec.v[1]);
-            atomicAdd(&(_gradient[v0I].z), gradient_vec.v[2]);
-            atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-            atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-            atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-            atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-            atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-            atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-            atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-            atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-            atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+            gipc::ATOMIC_ADD(&(_gradient[v0I].x), gradient_vec.v[0]);
+            gipc::ATOMIC_ADD(&(_gradient[v0I].y), gradient_vec.v[1]);
+            gipc::ATOMIC_ADD(&(_gradient[v0I].z), gradient_vec.v[2]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
 
 #ifdef NEWF
 
@@ -4953,7 +4953,7 @@ __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                 __GEIGEN__::__M12x9_M9x9_Multiply(PFPxTransPos, H), PFPx);
 #endif
 
-            int Hidx = matIndex[idx];  //int Hidx = atomicAdd(_cpNum + 4, 1);
+            int Hidx = matIndex[idx];  //int Hidx = gipc::ATOMIC_ADD(_cpNum + 4, 1);
 
             H12x12[Hidx]  = Hessian;
             D4Index[Hidx] = make_uint4(v0I, MMCVIDI.y, MMCVIDI.z, MMCVIDI.w);
@@ -4977,7 +4977,7 @@ __global__ void _calSelfCloseVal(const double3* _vertexes,
     double dist2   = _selfConstraintVal(_vertexes, MMCVIDI);
     if(dist2 < dTol)
     {
-        int tidx                   = atomicAdd(_close_cpNum, 1);
+        int tidx                   = gipc::ATOMIC_ADD(_close_cpNum, 1);
         _close_collisionPair[tidx] = MMCVIDI;
         _close_collisionVal[tidx]  = dist2;
     }
@@ -5031,8 +5031,8 @@ __global__ void _reduct_MSelfDist(const double3* _vertexes,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp.x, i);
-        double tempMax = __shfl_down(temp.y, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
+        double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
         temp.x         = __m_max(temp.x, tempMin);
         temp.y         = __m_max(temp.y, tempMax);
     }
@@ -5040,7 +5040,7 @@ __global__ void _reduct_MSelfDist(const double3* _vertexes,
     {
         sdata[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -5051,8 +5051,8 @@ __global__ void _reduct_MSelfDist(const double3* _vertexes,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp.x, i);
-            double tempMax = __shfl_down(temp.y, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
+            double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
             temp.x         = __m_max(temp.x, tempMin);
             temp.y         = __m_max(temp.y, tempMax);
         }
@@ -5088,17 +5088,17 @@ __global__ void _calFrictionGradient_gd(const double3*        _vertexes,
     {
         double3 gdf =
             __GEIGEN__::__s_vec_multiply(VProj, coef * lastH[idx] / sqrt(VProjMag2));
-        /*atomicAdd(&(_gradient[gidx].x), gdf.x);
-        atomicAdd(&(_gradient[gidx].y), gdf.y);
-        atomicAdd(&(_gradient[gidx].z), gdf.z);*/
+        /*gipc::ATOMIC_ADD(&(_gradient[gidx].x), gdf.x);
+        gipc::ATOMIC_ADD(&(_gradient[gidx].y), gdf.y);
+        gipc::ATOMIC_ADD(&(_gradient[gidx].z), gdf.z);*/
         _gradient[gidx] = __GEIGEN__::__add(_gradient[gidx], gdf);
     }
     else
     {
         double3 gdf = __GEIGEN__::__s_vec_multiply(VProj, coef * lastH[idx] / eps);
-        /*atomicAdd(&(_gradient[gidx].x), gdf.x);
-        atomicAdd(&(_gradient[gidx].y), gdf.y);
-        atomicAdd(&(_gradient[gidx].z), gdf.z);*/
+        /*gipc::ATOMIC_ADD(&(_gradient[gidx].x), gdf.x);
+        gipc::ATOMIC_ADD(&(_gradient[gidx].y), gdf.y);
+        gipc::ATOMIC_ADD(&(_gradient[gidx].z), gdf.z);*/
         _gradient[gidx] = __GEIGEN__::__add(_gradient[gidx], gdf);
     }
 }
@@ -5150,18 +5150,18 @@ __global__ void _calFrictionGradient(const double3*    _vertexes,
             relDX, tanBasis[idx], distCoord[idx].x, distCoord[idx].y, TTTDX);
         TTTDX = __GEIGEN__::__s_vec12_multiply(TTTDX, lastH[idx] * coef);
         {
-            atomicAdd(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
-            atomicAdd(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
-            atomicAdd(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
-            atomicAdd(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
-            atomicAdd(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
-            atomicAdd(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
-            atomicAdd(&(_gradient[MMCVIDI.z].x), TTTDX.v[6]);
-            atomicAdd(&(_gradient[MMCVIDI.z].y), TTTDX.v[7]);
-            atomicAdd(&(_gradient[MMCVIDI.z].z), TTTDX.v[8]);
-            atomicAdd(&(_gradient[MMCVIDI.w].x), TTTDX.v[9]);
-            atomicAdd(&(_gradient[MMCVIDI.w].y), TTTDX.v[10]);
-            atomicAdd(&(_gradient[MMCVIDI.w].z), TTTDX.v[11]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), TTTDX.v[6]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), TTTDX.v[7]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), TTTDX.v[8]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), TTTDX.v[9]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), TTTDX.v[10]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), TTTDX.v[11]);
         }
     }
     else
@@ -5194,12 +5194,12 @@ __global__ void _calFrictionGradient(const double3*    _vertexes,
             Friction::liftRelDXTanToMesh_PP(relDX, tanBasis[idx], TTTDX);
             TTTDX = __GEIGEN__::__s_vec6_multiply(TTTDX, lastH[idx] * coef);
             {
-                atomicAdd(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
-                atomicAdd(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
-                atomicAdd(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
-                atomicAdd(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
-                atomicAdd(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
-                atomicAdd(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
             }
         }
         else if(MMCVIDI.w < 0)
@@ -5229,15 +5229,15 @@ __global__ void _calFrictionGradient(const double3*    _vertexes,
             Friction::liftRelDXTanToMesh_PE(relDX, tanBasis[idx], distCoord[idx].x, TTTDX);
             TTTDX = __GEIGEN__::__s_vec9_multiply(TTTDX, lastH[idx] * coef);
             {
-                atomicAdd(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
-                atomicAdd(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
-                atomicAdd(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
-                atomicAdd(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
-                atomicAdd(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
-                atomicAdd(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
-                atomicAdd(&(_gradient[MMCVIDI.z].x), TTTDX.v[6]);
-                atomicAdd(&(_gradient[MMCVIDI.z].y), TTTDX.v[7]);
-                atomicAdd(&(_gradient[MMCVIDI.z].z), TTTDX.v[8]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), TTTDX.v[6]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), TTTDX.v[7]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), TTTDX.v[8]);
             }
         }
         else
@@ -5271,18 +5271,18 @@ __global__ void _calFrictionGradient(const double3*    _vertexes,
                 relDX, tanBasis[idx], distCoord[idx].x, distCoord[idx].y, TTTDX);
             TTTDX = __GEIGEN__::__s_vec12_multiply(TTTDX, lastH[idx] * coef);
 
-            atomicAdd(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
-            atomicAdd(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
-            atomicAdd(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
-            atomicAdd(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
-            atomicAdd(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
-            atomicAdd(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
-            atomicAdd(&(_gradient[MMCVIDI.z].x), TTTDX.v[6]);
-            atomicAdd(&(_gradient[MMCVIDI.z].y), TTTDX.v[7]);
-            atomicAdd(&(_gradient[MMCVIDI.z].z), TTTDX.v[8]);
-            atomicAdd(&(_gradient[MMCVIDI.w].x), TTTDX.v[9]);
-            atomicAdd(&(_gradient[MMCVIDI.w].y), TTTDX.v[10]);
-            atomicAdd(&(_gradient[MMCVIDI.w].z), TTTDX.v[11]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), TTTDX.v[0]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), TTTDX.v[1]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), TTTDX.v[2]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), TTTDX.v[3]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), TTTDX.v[4]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), TTTDX.v[5]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), TTTDX.v[6]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), TTTDX.v[7]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), TTTDX.v[8]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), TTTDX.v[9]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), TTTDX.v[10]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), TTTDX.v[11]);
         }
     }
 }
@@ -5446,18 +5446,18 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
 #endif
 
             {
-                atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
             }
         }
         else
@@ -5555,18 +5555,18 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
                 __GEIGEN__::__M12x9_v9_multiply(PFPx, flatten_pk1);
 
             {
-                atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
             }
         }
     }
@@ -5665,18 +5665,18 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
                     __GEIGEN__::__M12x9_v9_multiply(PFPx, flatten_pk1);
 
                 {
-                    atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
                 }
             }
             else
@@ -5847,12 +5847,12 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
 
 
                 {
-                    atomicAdd(&(_gradient[v0I].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[v0I].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[v0I].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
                 }
             }
         }
@@ -5951,18 +5951,18 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
                     __GEIGEN__::__M12x9_v9_multiply(PFPx, flatten_pk1);
 
                 {
-                    atomicAdd(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-                    atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.x].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
                 }
             }
             else
@@ -6172,15 +6172,15 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
 #endif
 
                 {
-                    atomicAdd(&(_gradient[v0I].x), gradient_vec.v[0]);
-                    atomicAdd(&(_gradient[v0I].y), gradient_vec.v[1]);
-                    atomicAdd(&(_gradient[v0I].z), gradient_vec.v[2]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-                    atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-                    atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].x), gradient_vec.v[0]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].y), gradient_vec.v[1]);
+                    gipc::ATOMIC_ADD(&(_gradient[v0I].z), gradient_vec.v[2]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+                    gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
                 }
             }
         }
@@ -6338,18 +6338,18 @@ __global__ void _calBarrierGradient(const double3*    _vertexes,
                 __GEIGEN__::__M12x9_v9_multiply(__GEIGEN__::__Transpose9x12(PFPx), flatten_pk1);
 #endif
 
-            atomicAdd(&(_gradient[v0I].x), gradient_vec.v[0]);
-            atomicAdd(&(_gradient[v0I].y), gradient_vec.v[1]);
-            atomicAdd(&(_gradient[v0I].z), gradient_vec.v[2]);
-            atomicAdd(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
-            atomicAdd(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
-            atomicAdd(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
-            atomicAdd(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
-            atomicAdd(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
-            atomicAdd(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
-            atomicAdd(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
-            atomicAdd(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
-            atomicAdd(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
+            gipc::ATOMIC_ADD(&(_gradient[v0I].x), gradient_vec.v[0]);
+            gipc::ATOMIC_ADD(&(_gradient[v0I].y), gradient_vec.v[1]);
+            gipc::ATOMIC_ADD(&(_gradient[v0I].z), gradient_vec.v[2]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].x), gradient_vec.v[3]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].y), gradient_vec.v[4]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.y].z), gradient_vec.v[5]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].x), gradient_vec.v[6]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].y), gradient_vec.v[7]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.z].z), gradient_vec.v[8]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].x), gradient_vec.v[9]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].y), gradient_vec.v[10]);
+            gipc::ATOMIC_ADD(&(_gradient[MMCVIDI.w].z), gradient_vec.v[11]);
         }
     }
 }
@@ -6399,9 +6399,9 @@ __global__ void _computeSoftConstraintGradientAndHessian(const double3* vertexes
     //printf("%f\n", dis);
     double d = motionRate;
     {
-        atomicAdd(&(gradient[vInd].x), d * rate * rate * (x - a));
-        atomicAdd(&(gradient[vInd].y), d * rate * rate * (y - b));
-        atomicAdd(&(gradient[vInd].z), d * rate * rate * (z - c));
+        gipc::ATOMIC_ADD(&(gradient[vInd].x), d * rate * rate * (x - a));
+        gipc::ATOMIC_ADD(&(gradient[vInd].y), d * rate * rate * (y - b));
+        gipc::ATOMIC_ADD(&(gradient[vInd].z), d * rate * rate * (z - c));
     }
     __GEIGEN__::Matrix3x3d Hpg;
     Hpg.m[0][0]   = rate * rate * d;
@@ -6413,10 +6413,10 @@ __global__ void _computeSoftConstraintGradientAndHessian(const double3* vertexes
     Hpg.m[2][0]   = 0;
     Hpg.m[2][1]   = 0;
     Hpg.m[2][2]   = rate * rate * d;
-    int pidx      = atomicAdd(_gpNum, 1);
+    int pidx      = gipc::ATOMIC_ADD(_gpNum, 1);
     H3x3[pidx]    = Hpg;
     D1Index[pidx] = vInd;
-    //_environment_collisionPair[atomicAdd(_gpNum, 1)] = surfVertIds[idx];
+    //_environment_collisionPair[gipc::ATOMIC_ADD(_gpNum, 1)] = surfVertIds[idx];
 }
 
 __global__ void _computeSoftConstraintGradient(const double3*  vertexes,
@@ -6437,9 +6437,9 @@ __global__ void _computeSoftConstraintGradient(const double3*  vertexes,
     //printf("%f\n", dis);
     double d = motionRate;
     {
-        atomicAdd(&(gradient[vInd].x), d * rate * rate * (x - a));
-        atomicAdd(&(gradient[vInd].y), d * rate * rate * (y - b));
-        atomicAdd(&(gradient[vInd].z), d * rate * rate * (z - c));
+        gipc::ATOMIC_ADD(&(gradient[vInd].x), d * rate * rate * (x - a));
+        gipc::ATOMIC_ADD(&(gradient[vInd].y), d * rate * rate * (y - b));
+        gipc::ATOMIC_ADD(&(gradient[vInd].z), d * rate * rate * (z - c));
     }
 }
 
@@ -6459,7 +6459,7 @@ __global__ void _GroundCollisionDetect(const double3*  vertexes,
     if(dist * dist > dHat)
         return;
 
-    _environment_collisionPair[atomicAdd(_gpNum, 1)] = surfVertIds[idx];
+    _environment_collisionPair[gipc::ATOMIC_ADD(_gpNum, 1)] = surfVertIds[idx];
 }
 
 __global__ void _computeGroundGradientAndHessian(const double3* vertexes,
@@ -6493,9 +6493,9 @@ __global__ void _computeGroundGradientAndHessian(const double3* vertexes,
     double3 grad = __GEIGEN__::__s_vec_multiply(normal, Kappa * g_b * 2 * dist);
 
     {
-        atomicAdd(&(gradient[gidx].x), grad.x);
-        atomicAdd(&(gradient[gidx].y), grad.y);
-        atomicAdd(&(gradient[gidx].z), grad.z);
+        gipc::ATOMIC_ADD(&(gradient[gidx].x), grad.x);
+        gipc::ATOMIC_ADD(&(gradient[gidx].y), grad.y);
+        gipc::ATOMIC_ADD(&(gradient[gidx].z), grad.z);
     }
 
     double param = 4.0 * H_b * dist2 + 2.0 * g_b;
@@ -6504,11 +6504,11 @@ __global__ void _computeGroundGradientAndHessian(const double3* vertexes,
         __GEIGEN__::Matrix3x3d nn = __GEIGEN__::__v_vec_toMat(normal, normal);
         __GEIGEN__::Matrix3x3d Hpg = __GEIGEN__::__S_Mat_multiply(nn, Kappa * param);
 
-        int pidx      = atomicAdd(_gpNum, 1);
+        int pidx      = gipc::ATOMIC_ADD(_gpNum, 1);
         H3x3[pidx]    = Hpg;
         D1Index[pidx] = gidx;
     }
-    //_environment_collisionPair[atomicAdd(_gpNum, 1)] = surfVertIds[idx];
+    //_environment_collisionPair[gipc::ATOMIC_ADD(_gpNum, 1)] = surfVertIds[idx];
 }
 
 __global__ void _computeGroundGradient(const double3* vertexes,
@@ -6537,9 +6537,9 @@ __global__ void _computeGroundGradient(const double3* vertexes,
     double3 grad = __GEIGEN__::__s_vec_multiply(normal, Kappa * g_b * 2 * dist);
 
     {
-        atomicAdd(&(gradient[gidx].x), grad.x);
-        atomicAdd(&(gradient[gidx].y), grad.y);
-        atomicAdd(&(gradient[gidx].z), grad.z);
+        gipc::ATOMIC_ADD(&(gradient[gidx].x), grad.x);
+        gipc::ATOMIC_ADD(&(gradient[gidx].y), grad.y);
+        gipc::ATOMIC_ADD(&(gradient[gidx].z), grad.z);
     }
 }
 
@@ -6563,7 +6563,7 @@ __global__ void _computeGroundCloseVal(const double3* vertexes,
 
     if(dist2 < dTol)
     {
-        int tidx                  = atomicAdd(_close_gpNum, 1);
+        int tidx                  = gipc::ATOMIC_ADD(_close_gpNum, 1);
         _closeConstraintID[tidx]  = gidx;
         _closeConstraintVal[tidx] = dist2;
     }
@@ -6626,8 +6626,8 @@ __global__ void _reduct_MGroundDist(const double3* vertexes,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp.x, i);
-        double tempMax = __shfl_down(temp.y, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
+        double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
         temp.x         = __m_max(temp.x, tempMin);
         temp.y         = __m_max(temp.y, tempMax);
     }
@@ -6635,7 +6635,7 @@ __global__ void _reduct_MGroundDist(const double3* vertexes,
     {
         sdata[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -6646,8 +6646,8 @@ __global__ void _reduct_MGroundDist(const double3* vertexes,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp.x, i);
-            double tempMax = __shfl_down(temp.y, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
+            double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
             temp.x         = __m_max(temp.x, tempMin);
             temp.y         = __m_max(temp.y, tempMax);
         }
@@ -6678,7 +6678,7 @@ __global__ void _computeSelfCloseVal(const double3*  vertexes,
 
     if(dist2 < dTol)
     {
-        int tidx                  = atomicAdd(_close_gpNum, 1);
+        int tidx                  = gipc::ATOMIC_ADD(_close_gpNum, 1);
         _closeConstraintID[tidx]  = gidx;
         _closeConstraintVal[tidx] = dist2;
     }
@@ -6744,13 +6744,13 @@ __global__ void _getFrictionEnergy_Reduction_3D(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -6760,7 +6760,7 @@ __global__ void _getFrictionEnergy_Reduction_3D(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -6808,13 +6808,13 @@ __global__ void _getFrictionEnergy_gd_Reduction_3D(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -6824,7 +6824,7 @@ __global__ void _getFrictionEnergy_gd_Reduction_3D(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -6872,13 +6872,13 @@ __global__ void _computeGroundEnergy_Reduction(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -6889,7 +6889,7 @@ __global__ void _computeGroundEnergy_Reduction(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -6927,7 +6927,7 @@ __global__ void _reduct_min_groundTimeStep_to_double(const double3*  vertexes,
     /*if (blockIdx.x == 4) {
         printf("%f\n", temp);
     }
-    __syncthreads();*/
+    gipc::SYNC_THREADS();*/
     //printf("%f\n", temp);
     int    warpTid = threadIdx.x % 32;
     int    warpId  = (threadIdx.x >> 5);
@@ -6946,14 +6946,14 @@ __global__ void _reduct_min_groundTimeStep_to_double(const double3*  vertexes,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_max(temp, tempMin);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -6964,7 +6964,7 @@ __global__ void _reduct_min_groundTimeStep_to_double(const double3*  vertexes,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_max(temp, tempMin);
         }
     }
@@ -7019,14 +7019,14 @@ __global__ void _reduct_min_InjectiveTimeStep_to_double(const double3* vertexes,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_max(temp, tempMin);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7037,7 +7037,7 @@ __global__ void _reduct_min_InjectiveTimeStep_to_double(const double3* vertexes,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_max(temp, tempMin);
         }
     }
@@ -7125,14 +7125,14 @@ __global__ void _reduct_min_selfTimeStep_to_double(const double3* vertexes,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = __shfl_down(temp, i);
+        double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_max(temp, tempMin);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7143,7 +7143,7 @@ __global__ void _reduct_min_selfTimeStep_to_double(const double3* vertexes,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMin = __shfl_down(temp, i);
+            double tempMin = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_max(temp, tempMin);
         }
     }
@@ -7185,14 +7185,14 @@ __global__ void _reduct_max_cfl_to_double(const double3* moveDir,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMax = __shfl_down(temp, i);
+        double tempMax = gipc::WARP_SHFL_DOWN(temp, i);
         temp           = __m_max(temp, tempMax);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7203,7 +7203,7 @@ __global__ void _reduct_max_cfl_to_double(const double3* moveDir,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            double tempMax = __shfl_down(temp, i);
+            double tempMax = gipc::WARP_SHFL_DOWN(temp, i);
             temp           = __m_max(temp, tempMax);
         }
     }
@@ -7242,14 +7242,14 @@ __global__ void _reduct_double3Sqn_to_double(const double3* A, double* D, int nu
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        //double tempMax = __shfl_down(temp, i);
-        temp += __shfl_down(temp, i);
+        //double tempMax = gipc::WARP_SHFL_DOWN(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7260,7 +7260,7 @@ __global__ void _reduct_double3Sqn_to_double(const double3* A, double* D, int nu
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7298,14 +7298,14 @@ __global__ void _reduct_double3Dot_to_double(const double3* A, const double3* B,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        //double tempMax = __shfl_down(temp, i);
-        temp += __shfl_down(temp, i);
+        //double tempMax = gipc::WARP_SHFL_DOWN(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7316,7 +7316,7 @@ __global__ void _reduct_double3Dot_to_double(const double3* A, const double3* B,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7357,13 +7357,13 @@ __global__ void _getKineticEnergy_Reduction_3D(
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7374,7 +7374,7 @@ __global__ void _getKineticEnergy_Reduction_3D(
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7426,13 +7426,13 @@ __global__ void _getBendingEnergy_Reduction(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7442,7 +7442,7 @@ __global__ void _getBendingEnergy_Reduction(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7494,13 +7494,13 @@ __global__ void _getFEMEnergy_Reduction_3D(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7510,7 +7510,7 @@ __global__ void _getFEMEnergy_Reduction_3D(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7555,13 +7555,13 @@ __global__ void _computeSoftConstraintEnergy_Reduction(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7572,7 +7572,7 @@ __global__ void _computeSoftConstraintEnergy_Reduction(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7618,13 +7618,13 @@ __global__ void _get_triangleFEMEnergy_Reduction_3D(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7634,7 +7634,7 @@ __global__ void _get_triangleFEMEnergy_Reduction_3D(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7676,13 +7676,13 @@ __global__ void _getRestStableNHKEnergy_Reduction_3D(double*       squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7692,7 +7692,7 @@ __global__ void _getRestStableNHKEnergy_Reduction_3D(double*       squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7736,13 +7736,13 @@ __global__ void _getBarrierEnergy_Reduction_3D(double*        squeue,
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7752,7 +7752,7 @@ __global__ void _getBarrierEnergy_Reduction_3D(double*        squeue,
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7790,13 +7790,13 @@ __global__ void _getDeltaEnergy_Reduction(double* squeue, const double3* b, cons
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7806,7 +7806,7 @@ __global__ void _getDeltaEnergy_Reduction(double* squeue, const double3* b, cons
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -7827,7 +7827,7 @@ __global__ void __add_reduction(double* mem, int numbers)
     //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
     double temp = mem[idx];
 
-    __threadfence();
+    gipc::THREAD_FENCE();
 
     int    warpTid = threadIdx.x % 32;
     int    warpId  = (threadIdx.x >> 5);
@@ -7845,13 +7845,13 @@ __global__ void __add_reduction(double* mem, int numbers)
     }
     for(int i = 1; i < 32; i = (i << 1))
     {
-        temp += __shfl_down(temp, i);
+        temp += gipc::WARP_SHFL_DOWN(temp, i);
     }
     if(warpTid == 0)
     {
         tep[warpId] = temp;
     }
-    __syncthreads();
+    gipc::SYNC_THREADS();
     if(threadIdx.x >= warpNum)
         return;
     if(warpNum > 1)
@@ -7861,7 +7861,7 @@ __global__ void __add_reduction(double* mem, int numbers)
         //	warpNum = ((tidNum + 31) >> 5);
         for(int i = 1; i < warpNum; i = (i << 1))
         {
-            temp += __shfl_down(temp, i);
+            temp += gipc::WARP_SHFL_DOWN(temp, i);
         }
     }
     if(threadIdx.x == 0)
@@ -8205,7 +8205,7 @@ __global__ void _edgeTriIntersectionQuery(const int*     _btype,
                                            _vertexes[face.y],
                                            _vertexes[face.z]))
                         {
-                            //atomicAdd(_isIntesect, -1);
+                            //gipc::ATOMIC_ADD(_isIntesect, -1);
                             *_isIntesect = -1;
                             printf("tri: %d %d %d,  edge: %d  %d\n",
                                    face.x,
@@ -8240,7 +8240,7 @@ __global__ void _edgeTriIntersectionQuery(const int*     _btype,
                                            _vertexes[face.y],
                                            _vertexes[face.z]))
                         {
-                            //atomicAdd(_isIntesect, -1);
+                            //gipc::ATOMIC_ADD(_isIntesect, -1);
                             *_isIntesect = -1;
                             printf("tri: %d %d %d,  edge: %d  %d\n",
                                    face.x,
@@ -8307,8 +8307,8 @@ __global__ void _calFrictionLastH_DistAndTan(const double3*    _vertexes,
     {
         if(MMCVIDI.w >= 0)
         {
-            last_index = atomicAdd(_cpNum_last, 1);
-            atomicAdd(_cpNum_last + 4, 1);
+            last_index = gipc::ATOMIC_ADD(_cpNum_last, 1);
+            gipc::ATOMIC_ADD(_cpNum_last + 4, 1);
             _d_EE(_vertexes[MMCVIDI.x],
                   _vertexes[MMCVIDI.y],
                   _vertexes[MMCVIDI.z],
@@ -8333,8 +8333,8 @@ __global__ void _calFrictionLastH_DistAndTan(const double3*    _vertexes,
         {
             if(MMCVIDI.y >= 0)
             {
-                last_index = atomicAdd(_cpNum_last, 1);
-                atomicAdd(_cpNum_last + 2, 1);
+                last_index = gipc::ATOMIC_ADD(_cpNum_last, 1);
+                gipc::ATOMIC_ADD(_cpNum_last + 2, 1);
                 _d_PP(_vertexes[v0I], _vertexes[MMCVIDI.y], dis);
                 distCoord[last_index].x = 0;
                 distCoord[last_index].y = 0;
@@ -8346,8 +8346,8 @@ __global__ void _calFrictionLastH_DistAndTan(const double3*    _vertexes,
         {
             if(MMCVIDI.y >= 0)
             {
-                last_index = atomicAdd(_cpNum_last, 1);
-                atomicAdd(_cpNum_last + 3, 1);
+                last_index = gipc::ATOMIC_ADD(_cpNum_last, 1);
+                gipc::ATOMIC_ADD(_cpNum_last + 3, 1);
                 _d_PE(_vertexes[v0I], _vertexes[MMCVIDI.y], _vertexes[MMCVIDI.z], dis);
                 Friction::computeClosestPoint_PE(_vertexes[v0I],
                                                  _vertexes[MMCVIDI.y],
@@ -8362,8 +8362,8 @@ __global__ void _calFrictionLastH_DistAndTan(const double3*    _vertexes,
         }
         else
         {
-            last_index = atomicAdd(_cpNum_last, 1);
-            atomicAdd(_cpNum_last + 4, 1);
+            last_index = gipc::ATOMIC_ADD(_cpNum_last, 1);
+            gipc::ATOMIC_ADD(_cpNum_last + 4, 1);
             _d_PT(_vertexes[v0I],
                   _vertexes[MMCVIDI.y],
                   _vertexes[MMCVIDI.z],

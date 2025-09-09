@@ -10,7 +10,7 @@
 #include "math.h"
 #include <stdio.h>
 #include "Eigen/Eigen"
-
+#include "device_utils.h"
 namespace LibShell {
     __device__ __host__
         static Eigen::Matrix3d crossMatrix(Eigen::Vector3d v) {
@@ -1156,21 +1156,21 @@ void _calculate_fem_gradient_hessian(__GEIGEN__::Matrix3x3d* DmInverses, const d
     //printf("%f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f\n", f.v[0], f.v[1], f.v[2], f.v[3], f.v[4], f.v[5], f.v[6], f.v[7], f.v[8], f.v[9], f.v[10], f.v[11]);
 
     {
-        atomicAdd(&(gradient[tetrahedras[idx].x].x), f.v[0]);
-        atomicAdd(&(gradient[tetrahedras[idx].x].y), f.v[1]);
-        atomicAdd(&(gradient[tetrahedras[idx].x].z), f.v[2]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].x].x), f.v[0]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].x].y), f.v[1]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].x].z), f.v[2]);
 
-        atomicAdd(&(gradient[tetrahedras[idx].y].x), f.v[3]);
-        atomicAdd(&(gradient[tetrahedras[idx].y].y), f.v[4]);
-        atomicAdd(&(gradient[tetrahedras[idx].y].z), f.v[5]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].y].x), f.v[3]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].y].y), f.v[4]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].y].z), f.v[5]);
 
-        atomicAdd(&(gradient[tetrahedras[idx].z].x), f.v[6]);
-        atomicAdd(&(gradient[tetrahedras[idx].z].y), f.v[7]);
-        atomicAdd(&(gradient[tetrahedras[idx].z].z), f.v[8]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].z].x), f.v[6]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].z].y), f.v[7]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].z].z), f.v[8]);
 
-        atomicAdd(&(gradient[tetrahedras[idx].w].x), f.v[9]);
-        atomicAdd(&(gradient[tetrahedras[idx].w].y), f.v[10]);
-        atomicAdd(&(gradient[tetrahedras[idx].w].z), f.v[11]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].w].x), f.v[9]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].w].y), f.v[10]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].w].z), f.v[11]);
     }
 
 #ifdef USE_SNK
@@ -1218,15 +1218,15 @@ void _calculate_triangle_fem_gradient_hessian(__GEIGEN__::Matrix2x2d* trimInvers
     //printf("%f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f\n", f.v[0], f.v[1], f.v[2], f.v[3], f.v[4], f.v[5], f.v[6], f.v[7], f.v[8], f.v[9], f.v[10], f.v[11]);
 
     {
-        atomicAdd(&(gradient[triangles[idx].x].x), f.v[0]);
-        atomicAdd(&(gradient[triangles[idx].x].y), f.v[1]);
-        atomicAdd(&(gradient[triangles[idx].x].z), f.v[2]);
-        atomicAdd(&(gradient[triangles[idx].y].x), f.v[3]);
-        atomicAdd(&(gradient[triangles[idx].y].y), f.v[4]);
-        atomicAdd(&(gradient[triangles[idx].y].z), f.v[5]);
-        atomicAdd(&(gradient[triangles[idx].z].x), f.v[6]);
-        atomicAdd(&(gradient[triangles[idx].z].y), f.v[7]);
-        atomicAdd(&(gradient[triangles[idx].z].z), f.v[8]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].x].x), f.v[0]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].x].y), f.v[1]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].x].z), f.v[2]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].y].x), f.v[3]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].y].y), f.v[4]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].y].z), f.v[5]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].z].x), f.v[6]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].z].y), f.v[7]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].z].z), f.v[8]);
     }
 
     __GEIGEN__::Matrix6x6d Hq = __GEIGEN__::__s_M6x6_Multiply(__project_BaraffWitkinStretch_H(F), stretchStiff);
@@ -1266,15 +1266,15 @@ void _calculate_triangle_fem_gradient(__GEIGEN__::Matrix2x2d* trimInverses, cons
     //printf("%f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f\n", f.v[0], f.v[1], f.v[2], f.v[3], f.v[4], f.v[5], f.v[6], f.v[7], f.v[8], f.v[9], f.v[10], f.v[11]);
 
     {
-        atomicAdd(&(gradient[triangles[idx].x].x), f.v[0]);
-        atomicAdd(&(gradient[triangles[idx].x].y), f.v[1]);
-        atomicAdd(&(gradient[triangles[idx].x].z), f.v[2]);
-        atomicAdd(&(gradient[triangles[idx].y].x), f.v[3]);
-        atomicAdd(&(gradient[triangles[idx].y].y), f.v[4]);
-        atomicAdd(&(gradient[triangles[idx].y].z), f.v[5]);
-        atomicAdd(&(gradient[triangles[idx].z].x), f.v[6]);
-        atomicAdd(&(gradient[triangles[idx].z].y), f.v[7]);
-        atomicAdd(&(gradient[triangles[idx].z].z), f.v[8]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].x].x), f.v[0]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].x].y), f.v[1]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].x].z), f.v[2]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].y].x), f.v[3]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].y].y), f.v[4]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].y].z), f.v[5]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].z].x), f.v[6]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].z].y), f.v[7]);
+        gipc::ATOMIC_ADD(&(gradient[triangles[idx].z].z), f.v[8]);
     }
 }
 
@@ -1316,21 +1316,21 @@ void _calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses, const double3* 
     }
 
     {
-        atomicAdd(&(gradient[tetrahedras[idx].x].x), f.v[0]);
-        atomicAdd(&(gradient[tetrahedras[idx].x].y), f.v[1]);
-        atomicAdd(&(gradient[tetrahedras[idx].x].z), f.v[2]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].x].x), f.v[0]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].x].y), f.v[1]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].x].z), f.v[2]);
 
-        atomicAdd(&(gradient[tetrahedras[idx].y].x), f.v[3]);
-        atomicAdd(&(gradient[tetrahedras[idx].y].y), f.v[4]);
-        atomicAdd(&(gradient[tetrahedras[idx].y].z), f.v[5]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].y].x), f.v[3]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].y].y), f.v[4]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].y].z), f.v[5]);
 
-        atomicAdd(&(gradient[tetrahedras[idx].z].x), f.v[6]);
-        atomicAdd(&(gradient[tetrahedras[idx].z].y), f.v[7]);
-        atomicAdd(&(gradient[tetrahedras[idx].z].z), f.v[8]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].z].x), f.v[6]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].z].y), f.v[7]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].z].z), f.v[8]);
 
-        atomicAdd(&(gradient[tetrahedras[idx].w].x), f.v[9]);
-        atomicAdd(&(gradient[tetrahedras[idx].w].y), f.v[10]);
-        atomicAdd(&(gradient[tetrahedras[idx].w].z), f.v[11]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].w].x), f.v[9]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].w].y), f.v[10]);
+        gipc::ATOMIC_ADD(&(gradient[tetrahedras[idx].w].z), f.v[11]);
     }
 }
 
@@ -1395,21 +1395,21 @@ void _calculate_bending_gradient_hessian(const double3* vertexes, const double3*
 
 
     {
-        atomicAdd(&(gradient[edge.x].x), f.v[0]);
-        atomicAdd(&(gradient[edge.x].y), f.v[1]);
-        atomicAdd(&(gradient[edge.x].z), f.v[2]);
+        gipc::ATOMIC_ADD(&(gradient[edge.x].x), f.v[0]);
+        gipc::ATOMIC_ADD(&(gradient[edge.x].y), f.v[1]);
+        gipc::ATOMIC_ADD(&(gradient[edge.x].z), f.v[2]);
 
-        atomicAdd(&(gradient[edge.y].x), f.v[3]);
-        atomicAdd(&(gradient[edge.y].y), f.v[4]);
-        atomicAdd(&(gradient[edge.y].z), f.v[5]);
+        gipc::ATOMIC_ADD(&(gradient[edge.y].x), f.v[3]);
+        gipc::ATOMIC_ADD(&(gradient[edge.y].y), f.v[4]);
+        gipc::ATOMIC_ADD(&(gradient[edge.y].z), f.v[5]);
 
-        atomicAdd(&(gradient[adj.x].x), f.v[6]);
-        atomicAdd(&(gradient[adj.x].y), f.v[7]);
-        atomicAdd(&(gradient[adj.x].z), f.v[8]);
+        gipc::ATOMIC_ADD(&(gradient[adj.x].x), f.v[6]);
+        gipc::ATOMIC_ADD(&(gradient[adj.x].y), f.v[7]);
+        gipc::ATOMIC_ADD(&(gradient[adj.x].z), f.v[8]);
 
-        atomicAdd(&(gradient[adj.y].x), f.v[9]);
-        atomicAdd(&(gradient[adj.y].y), f.v[10]);
-        atomicAdd(&(gradient[adj.y].z), f.v[11]);
+        gipc::ATOMIC_ADD(&(gradient[adj.y].x), f.v[9]);
+        gipc::ATOMIC_ADD(&(gradient[adj.y].y), f.v[10]);
+        gipc::ATOMIC_ADD(&(gradient[adj.y].z), f.v[11]);
     }
     __GEIGEN__::Matrix12x12d d_H;
     for (int i = 0; i < 12; i++) {
