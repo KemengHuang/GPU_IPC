@@ -16,15 +16,8 @@
 #include <thrust/sequence.h>
 #include <thrust/device_ptr.h>
 #include "FrictionUtils.cuh"
-#include "zensim/math/Complex.hpp"
-#include "zensim/math/MathUtils.h"
 #include <fstream>
 #include "Eigen/Eigen"
-
-#include "zensim/geometry/Distance.hpp"
-#include "zensim/geometry/SpatialQuery.hpp"
-#include "zensim/math/matrix/Eigen.hpp"
-#include "zensim/math/MathUtils.h"
 #include "device_utils.h"
 using namespace Eigen;
 
@@ -1037,44 +1030,44 @@ __device__ double _computeInjectiveStepSize_3d(const double3*  verts,
     }
     else
     {
-        //double results[3];
-        //int number = 0;
-        //__GEIGEN__::__NewtonSolverForCubicEquation(a, b, c, d, results, number, errorRate);
+        double results[3];
+        int number = 0;
+        __GEIGEN__::__NewtonSolverForCubicEquation(a, b, c, d, results, number, errorRate);
 
-        //t = 1;
-        //for (int index = 0;index < number;index++) {
-        //    if (results[index] > 0 && results[index] < t) {
-        //        t = results[index];
-        //    }
-        //}
-        zs::complex<double> i(0, 1);
-        zs::complex<double> delta0(b * b - 3 * a * c, 0);
-        zs::complex<double> delta1(2 * b * b * b - 9 * a * b * c + 27 * a * a * d, 0);
-        zs::complex<double> C =
-            pow((delta1 + sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0,
-                1.0 / 3.0);
-        if(abs(C) == 0.0)
-        {
-            // a corner case listed by wikipedia found by our collaborate from another project
-            C = pow((delta1 - sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0,
-                    1.0 / 3.0);
+        t = 1;
+        for (int index = 0;index < number;index++) {
+            if (results[index] > 0 && results[index] < t) {
+                t = results[index];
+            }
         }
+        //zs::complex<double> i(0, 1);
+        //zs::complex<double> delta0(b * b - 3 * a * c, 0);
+        //zs::complex<double> delta1(2 * b * b * b - 9 * a * b * c + 27 * a * a * d, 0);
+        //zs::complex<double> C =
+        //    pow((delta1 + sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0,
+        //        1.0 / 3.0);
+        //if(abs(C) == 0.0)
+        //{
+        //    // a corner case listed by wikipedia found by our collaborate from another project
+        //    C = pow((delta1 - sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0,
+        //            1.0 / 3.0);
+        //}
 
-        zs::complex<double> u2 = (-1.0 + sqrt(3.0) * i) / 2.0;
-        zs::complex<double> u3 = (-1.0 - sqrt(3.0) * i) / 2.0;
+        //zs::complex<double> u2 = (-1.0 + sqrt(3.0) * i) / 2.0;
+        //zs::complex<double> u3 = (-1.0 - sqrt(3.0) * i) / 2.0;
 
-        zs::complex<double> t1 = (b + C + delta0 / C) / (-3.0 * a);
-        zs::complex<double> t2 = (b + u2 * C + delta0 / (u2 * C)) / (-3.0 * a);
-        zs::complex<double> t3 = (b + u3 * C + delta0 / (u3 * C)) / (-3.0 * a);
-        t                      = -1;
-        if((abs(imag(t1)) < errorRate /** errorRate*/) && (real(t1) > 0))
-            t = real(t1);
-        if((abs(imag(t2)) < errorRate /** errorRate*/) && (real(t2) > 0)
-           && ((real(t2) < t) || (t < 0)))
-            t = real(t2);
-        if((abs(imag(t3)) < errorRate /** errorRate*/) && (real(t3) > 0)
-           && ((real(t3) < t) || (t < 0)))
-            t = real(t3);
+        //zs::complex<double> t1 = (b + C + delta0 / C) / (-3.0 * a);
+        //zs::complex<double> t2 = (b + u2 * C + delta0 / (u2 * C)) / (-3.0 * a);
+        //zs::complex<double> t3 = (b + u3 * C + delta0 / (u3 * C)) / (-3.0 * a);
+        //t                      = -1;
+        //if((abs(imag(t1)) < errorRate /** errorRate*/) && (real(t1) > 0))
+        //    t = real(t1);
+        //if((abs(imag(t2)) < errorRate /** errorRate*/) && (real(t2) > 0)
+        //   && ((real(t2) < t) || (t < 0)))
+        //    t = real(t2);
+        //if((abs(imag(t3)) < errorRate /** errorRate*/) && (real(t3) > 0)
+        //   && ((real(t3) < t) || (t < 0)))
+        //    t = real(t3);
     }
     if(t <= 0)
         t = 1;

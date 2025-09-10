@@ -12,8 +12,8 @@
 #include <cuda_runtime.h>
 #include "eigen_data.h"
 
-__device__
-double atomicAdd_double(double* address, double val);
+//__device__
+//double atomicAdd_double(double* address, double val);
 
 namespace __GEIGEN__ {
 	__device__ __host__ void __init_Mat3x3(Matrix3x3d& M, const double& val);

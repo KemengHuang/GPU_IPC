@@ -21,7 +21,7 @@ Source code contributor: [Kemeng Huang](https://kemenghuang.github.io)
 Please cite the following paper if it helps. 
 
 ```
-@article{10.1145/3643028,
+@article{gipc2024,
 author = {Huang, Kemeng and Chitalu, Floyd M. and Lin, Huancheng and Komura, Taku},
 title = {GIPC: Fast and Stable Gauss-Newton Optimization of IPC Barrier Energy},
 year = {2024},
@@ -82,11 +82,3 @@ It may be necessary to manually adjust the GPU memory buffer in the source code 
 ![alt text](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/collision.JPG)
 ## hessian buffer
 ![alt text](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/hessian.JPG)
-
-EXTERNAL CREDITS
-================
-
-This work utilizes the following code, which have been included here for convenience:
-Copyrights are retained by the original authors.
-
-zpc https://github.com/zenustech/zpc

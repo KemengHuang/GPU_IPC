@@ -9,23 +9,22 @@
 #pragma once
 #include "gpu_eigen_libs.cuh"
 #include "math.h"
-#include "zensim/math/matrix/QRSVD.hpp"
-#include "zensim/math/bit/Bits.h"
+#include "QRSVD.hpp"
 
-__device__
-double atomicAdd_double(double* address, double val)
-{
-	unsigned long long int* address_as_ull =
-		(unsigned long long int*)address;
-	unsigned long long int old = *address_as_ull, assumed;
-	do {
-		assumed = old;
-		old = atomicCAS(address_as_ull, assumed,
-			__double_as_longlong(val +
-				__longlong_as_double(assumed)));
-	} while (assumed != old);
-	return __longlong_as_double(old);
-}
+//__device__
+//double atomicAdd_double(double* address, double val)
+//{
+//	unsigned long long int* address_as_ull =
+//		(unsigned long long int*)address;
+//	unsigned long long int old = *address_as_ull, assumed;
+//	do {
+//		assumed = old;
+//		old = atomicCAS(address_as_ull, assumed,
+//			__double_as_longlong(val +
+//				__longlong_as_double(assumed)));
+//	} while (assumed != old);
+//	return __longlong_as_double(old);
+//}
 
 
 namespace __GEIGEN__ {
@@ -1386,19 +1385,25 @@ namespace __GEIGEN__ {
 	}
 
 	__device__ void SVD(const Matrix3x3d& F, Matrix3x3d& Uout, Matrix3x3d& Vout, Matrix3x3d& Sigma) {
-		using matview = zs::vec_view<double, zs::integer_seq<int, 3, 3>>;
-		using cmatview = zs::vec_view<const double, zs::integer_seq<int, 3, 3>>;
-		using vec3 = zs::vec<double, 3>;
-		cmatview F_{ (const double*)F.m };
-		matview UU{ (double*)Uout.m }, VV{ (double*)Vout.m };
-		vec3 SS{};
-		zs::tie(UU, SS, VV) = zs::math::qr_svd(F_);
-		for (int i = 0; i != 3; ++i)
-			for (int j = 0; j != 3; ++j) {
-				Uout.m[i][j] = UU(i, j);
-				Vout.m[i][j] = VV(i, j);
-				Sigma.m[i][j] = (i != j ? 0. : SS[i]);
-			}
+        Eigen::Matrix<double, 3, 3> MF, UU, VV;
+        Eigen::Matrix<double, 3, 1> SS;
+        for(int i = 0; i < 3; i++)
+        {
+            for(int j = 0; j < 3; j++)
+            {
+                MF(i, j) = F.m[i][j];
+            }
+        }
+
+        __GEIGEN__::math::qr_svd(MF, SS, UU, VV);
+
+        for(int i = 0; i != 3; ++i)
+            for(int j = 0; j != 3; ++j)
+            {
+                Uout.m[i][j]  = UU(i, j);
+                Vout.m[i][j]  = VV(i, j);
+                Sigma.m[i][j] = (i != j ? 0. : SS[i]);
+            }
 	}
 
 	__device__ __host__ void __makePD2x2(const double& a00, const double& a01, const double& a10, const double& a11, double eigenValues[2], int& num, double2 eigenVectors[2], double eps) {
