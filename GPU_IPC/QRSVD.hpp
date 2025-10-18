@@ -7,6 +7,7 @@ namespace math
 {
 
     template <typename T>
+    __host__ __device__
     constexpr void swap(T& a, T& b)
     {
         auto s = a;
@@ -15,12 +16,14 @@ namespace math
     }
 
     template <typename T>
+    __host__ __device__
     constexpr T abd(T& a)
     {
         return a > 0 ? a : -a;
     }
 
     template <typename T>
+    __host__ __device__
     constexpr void polar_decomposition(const Eigen::Matrix<T, 2, 2>& A,
                                        Eigen::Matrix<T, 2, 2>&       S,
                                        GivensRotation<T>&            R) noexcept
@@ -42,6 +45,7 @@ namespace math
     }
 
     template <typename T>
+    __host__ __device__
     constexpr void qr_svd2x2(const Eigen::Matrix<T, 2, 2>& A,
                              Eigen::Matrix<T, 2, 1>&       S,
                              GivensRotation<T>&            U,
@@ -96,6 +100,7 @@ namespace math
     }
 
     template <typename T>
+    __host__ __device__
     constexpr T wilkinson_shift(const T a1, const T b1, const T a2) noexcept
     {
         T d  = (T)0.5 * (a1 - a2);
@@ -105,6 +110,7 @@ namespace math
     }
 
     template <typename T>
+    __host__ __device__
     constexpr void flip_sign(int j, Eigen::Matrix<T, 3, 3>& U, Eigen::Matrix<T, 3, 1>& S) noexcept
     {
         S(j)     = -S(j);
@@ -112,6 +118,7 @@ namespace math
     }
 
     template <int t, typename T>
+    __host__ __device__
     constexpr void sort_sigma(Eigen::Matrix<T, 3, 3>& U,
                               Eigen::Matrix<T, 3, 1>& sigma,
                               Eigen::Matrix<T, 3, 3>& V) noexcept
@@ -189,6 +196,7 @@ namespace math
     }
 
     template <int t, typename T>
+    __host__ __device__
     constexpr void process(Eigen::Matrix<T, 3, 3>& B,
                            Eigen::Matrix<T, 3, 3>& U,
                            Eigen::Matrix<T, 3, 1>& S,
@@ -214,6 +222,7 @@ namespace math
 
 
     template <typename T>
+    __host__ __device__
     constexpr void qr_svd(const Eigen::Matrix<T, 3, 3>& A,
                           Eigen::Matrix<T, 3, 1>&       S,
                           Eigen::Matrix<T, 3, 3>&       U,
