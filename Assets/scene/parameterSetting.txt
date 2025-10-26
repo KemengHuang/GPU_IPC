@@ -1,5 +1,5 @@
 volume_mesh_density                           1000
-volume_mesh_YoungsModulus                     1e6
+volume_mesh_YoungsModulus                     1e5
 poisson_rate                                  0.49
 friction_rate                                 0.4
 triangle(cloth)_mesh_thickness                0.001
