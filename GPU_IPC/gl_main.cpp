@@ -515,46 +515,7 @@ void initFEM(tetrahedra_obj& mesh)
     __GEIGEN__::__set_Mat_val(
         rotationX, 1, 0, 0, 0, cos(angleX), -sin(angleX), 0, sin(angleX), cos(angleX));
 
-    //for (int j = 0; j < mesh.vertexNum; j++) {
-    //    mesh.vertexes[j] = __GEIGEN__::__add(mesh.vertexes[j], make_double3(0.6, 0.6, 0.6));
-    //}
-
-    //for (int j = 0; j < mesh.vertexNum / 2; j++) {
-    //    __GEIGEN__::Matrix3x3d rotate = __GEIGEN__::__M_Mat_multiply(rotationX, __GEIGEN__::__M_Mat_multiply(rotationY, rotationZ));
-    //    mesh.vertexes[j] = __GEIGEN__::__add(__GEIGEN__::__M_v_multiply(rotate, __GEIGEN__::__add(mesh.vertexes[j], make_double3(0.0, -0.3, 0))), make_double3(0.0, 0.4, 0));
-    //    mesh.vertexes[j] = __GEIGEN__::__add(mesh.vertexes[j], make_double3(0.0, 0.3, 0));
-    //}
-    //for (int j = mesh.vertexNum / 2; j < mesh.vertexNum; j++) {
-    //    angleX = PI / 2, angleY = PI / 4, angleZ = PI / 2;
-    //    __GEIGEN__::__set_Mat_val(rotationY, cos(angleY), 0, -sin(angleY), 0, 1, 0, sin(angleY), 0, cos(angleY));
-    //    __GEIGEN__::__set_Mat_val(rotationX, 1, 0, 0, 0, cos(angleX), -sin(angleX), 0, sin(angleX), cos(angleX));
-    //    __GEIGEN__::__set_Mat_val(rotationZ, cos(angleZ), -sin(angleZ), 0, sin(angleZ), cos(angleZ), 0, 0, 0, 1);
-
-    //    __GEIGEN__::Matrix3x3d rotate = __GEIGEN__::__M_Mat_multiply(rotationX, __GEIGEN__::__M_Mat_multiply(rotationY, rotationZ));
-    //    //mesh.vertexes[j] = __GEIGEN__::__add(__GEIGEN__::__M_v_multiply(rotate, __GEIGEN__::__add(mesh.vertexes[j], make_double3(0.0, 0.3, 0))), make_double3(0.0, -0.4, 0));
-    //    __GEIGEN__::__init_Mat3x3(mesh.constraints[j], 0);
-    //}
-
-    //for (int j = 0; j < mesh.vertexNum; j++) {
-    //    if ((mesh.vertexes[j].x) > 0.5-1e-4) {
-    //        mesh.boundaryTypies[j] = 1;
-    //        __GEIGEN__::__init_Mat3x3(mesh.constraints[j], 0);
-    //    }
-    //    if (((mesh.vertexes[j].x) < -0.5 + 1e-4)) {
-    //        mesh.boundaryTypies[j] = -1;
-    //        __GEIGEN__::__init_Mat3x3(mesh.constraints[j], 0);
-    //    }
-    //}
-
-    //   for (int j = 0; j < mesh.vertexNum; j++) {
-    //       double dis = pow(mesh.vertexes[j].y,2)+pow(mesh.vertexes[j].z,2);
-    //       if (dis<0.012*0.012&&mesh.vertexes[j].x>-0.25&&mesh.vertexes[j].x<-0.07) {
-    //           mesh.boundaryTypies[j] = 1;
-    //           __GEIGEN__::__init_Mat3x3(mesh.constraints[j], 0);
-    //       }
-    //   }
-
-
+    
     for(int i = 0; i < mesh.tetrahedraNum; i++)
     {
         __GEIGEN__::Matrix3x3d DM;

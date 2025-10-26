@@ -1574,23 +1574,39 @@ void BHessian::updateDNum(const int& tri_Num, const int& tet_number, const uint3
 #endif
 }
 
-void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number, const int& surfvert_number, const int& surface_number, const int& surfEdge_number, const int& triangle_num, const int& tri_Edge_number) {
+void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number,
+                                   const int& surfvert_number,
+                                   const int& surface_number,
+                                   const int& surfEdge_number,
+                                   const int& triangle_num,
+                                   const int& tri_Edge_number)
+{
 
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H12x12, (2 * (surfvert_number + surfEdge_number) + tet_number + tri_Edge_number) * sizeof(__GEIGEN__::Matrix12x12d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H9x9, (2 * (surfEdge_number + surfvert_number) + triangle_num) * sizeof(__GEIGEN__::Matrix9x9d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H6x6, 2 * (surfvert_number + surfEdge_number) * sizeof(__GEIGEN__::Matrix6x6d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H3x3, 2 * surfvert_number * sizeof(__GEIGEN__::Matrix3x3d)));
+    int minCollisionBuffer4 = std::max(2 * (surfvert_number + surfEdge_number), 100000);
+    int minCollisionBuffer3 = std::max(2 * (surfvert_number + surfEdge_number), 100000);
+    int minCollisionBuffer2 = std::max(2 * (surfvert_number + surfEdge_number), 100000);
+    int minCollisionBuffer1 = 2 * surfvert_number;
 
 
-    //hH12x12 = new __GEIGEN__::Matrix12x12d[2000000];
-    //hH9x9 = new __GEIGEN__::Matrix9x9d[1000000];
-    //hH6x6 = new __GEIGEN__::Matrix6x6d[1000000];
-    //hH3x3 = new __GEIGEN__::Matrix3x3d[2 * (surfvert_number)];
+    CUDA_SAFE_CALL(cudaMalloc((void**)&H12x12,
+                              (minCollisionBuffer4 + tet_number + tri_Edge_number)
+                                  * sizeof(__GEIGEN__::Matrix12x12d)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&H9x9,
+                              (minCollisionBuffer3 + triangle_num)
+                                  * sizeof(__GEIGEN__::Matrix9x9d)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&H6x6,
+                              minCollisionBuffer2 * sizeof(__GEIGEN__::Matrix6x6d)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&H3x3,
+                              minCollisionBuffer1 * sizeof(__GEIGEN__::Matrix3x3d)));
 
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D1Index, 2 * surfvert_number * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D2Index, 2 * (surfvert_number + surfEdge_number) * sizeof(uint2)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D3Index, (2 * (surfEdge_number + surfvert_number)+ triangle_num) * sizeof(uint3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D4Index, (2 * (surfvert_number + surfEdge_number) + tet_number + tri_Edge_number) * sizeof(uint4)));
+
+    CUDA_SAFE_CALL(cudaMalloc((void**)&D1Index, minCollisionBuffer1 * sizeof(uint32_t)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&D2Index, minCollisionBuffer2 * sizeof(uint2)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&D3Index,
+                              (minCollisionBuffer3 + triangle_num) * sizeof(uint3)));
+    CUDA_SAFE_CALL(cudaMalloc((void**)&D4Index,
+                              (minCollisionBuffer4 + tet_number + tri_Edge_number)
+                                  * sizeof(uint4)));
 }
 
 void BHessian::FREE_DEVICE_MEM() {

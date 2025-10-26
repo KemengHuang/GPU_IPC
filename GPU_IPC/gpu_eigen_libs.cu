@@ -9,22 +9,7 @@
 #pragma once
 #include "gpu_eigen_libs.cuh"
 #include "math.h"
-#include "QRSVD.hpp"
 
-//__device__
-//double atomicAdd_double(double* address, double val)
-//{
-//	unsigned long long int* address_as_ull =
-//		(unsigned long long int*)address;
-//	unsigned long long int old = *address_as_ull, assumed;
-//	do {
-//		assumed = old;
-//		old = atomicCAS(address_as_ull, assumed,
-//			__double_as_longlong(val +
-//				__longlong_as_double(assumed)));
-//	} while (assumed != old);
-//	return __longlong_as_double(old);
-//}
 
 
 namespace __GEIGEN__ {
@@ -911,69 +896,19 @@ namespace __GEIGEN__ {
 			input.m[0][1] * input.m[1][0] * input.m[2][2];
 	}
 
-	//__device__ __host__ void __Inverse(const Matrix3x3d& input, Matrix3x3d& output) {
-	//	for (int i = 0;i < 3;i++) {
-	//		for (int j = 0;j < 3;j++) {
-	//			output.m[i][j] = input.m[i][j];
-	//		}
-	//	}
-
-	//	int swapR[3], swapC[3];
-	//	int pivot[3] = { 0 };
-
-	//	for (int i = 0; i < 3; ++i) {
-	//		int pr, pc;
-	//		double maxValue = -1e32;
-	//		for (int j = 0; j < 3; ++j) {
-	//			if (pivot[j] != 1) {
-	//				for (int k = 0; k < 3; ++k) {
-	//					if (pivot[k] == 0) {
-	//						if (output.m[j][k] > maxValue) {
-	//							maxValue = output.m[j][k];
-	//							pr = j;
-	//							pc = k;
-	//						}
-	//					}
-	//				}
-	//			}
-	//		}
-	//		if (pr != pc) {
-	//			double pv;
-	//			for (int j = 0; j < 3; ++j) {
-	//				pv = output.m[pr][j];
-	//				output.m[pr][j] = output.m[pc][j];
-	//				output.m[pc][j] = pv;
-	//			}
-	//		}
-	//		swapC[i] = pc;
-	//		swapR[i] = pr;
-	//		++pivot[i];
-	//		double inv = 1.f / output.m[pc][pc];
-	//		output.m[pc][pc] = 1;
-	//		for (int j = 0; j < 3; ++j) {
-	//			output.m[pc][j] *= inv;
-	//		}
-	//		for (int j = 0; j < 3; ++j) {
-	//			if (j != pc) {
-	//				double powerRatio = output.m[j][pc];
-	//				output.m[j][pc] = 0.f;
-	//				for (int k = 0; k < 3; ++k) {
-	//					output.m[j][k] -= output.m[pc][k] * powerRatio;
-	//				}
-	//			}
-	//		}
-	//	}
-	//	for (int i = 0; i < 3; ++i) {
-	//		if (swapR[i] != swapC[i]) {
-	//			double pv;
-	//			for (int j = 0; j < 3; ++j) {
-	//				pv = output.m[j][swapC[i]];
-	//				output.m[j][swapC[i]] = output.m[j][swapR[i]];
-	//				output.m[j][swapR[i]] = pv;
-	//			}
-	//		}
-	//	}
-	//}
+	__device__ __host__ double __squaredNorm(const Matrix3x3d& A)
+    {
+        double sum = 0;
+        for(int i = 0; i < 3; i++)
+        {
+            for(int j = 0; j < 3; j++)
+            {
+                double val = A.m[i][j];
+                sum += val * val;
+            }
+        }
+        return sum;
+    }
 
 	__device__ __host__ void __Inverse(const Matrix3x3d& input, Matrix3x3d& result) {
 		double eps = 1e-15;

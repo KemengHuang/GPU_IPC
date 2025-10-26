@@ -11,7 +11,7 @@
 #define _GPU_EIGEN_LIB_CUH_
 #include <cuda_runtime.h>
 #include "eigen_data.h"
-
+#include "QRSVD.hpp"
 //__device__
 //double atomicAdd_double(double* address, double val);
 
@@ -211,6 +211,8 @@ namespace __GEIGEN__ {
 	__device__ __host__ void __Determiant(const Matrix3x3d& input, double& determinant);
 
 	__device__ __host__ double __Determiant(const Matrix3x3d& input);
+
+	__device__ __host__ double __squaredNorm(const Matrix3x3d& A);
 
 	__device__ __host__ void __Inverse(const Matrix3x3d& input, Matrix3x3d& output);
 

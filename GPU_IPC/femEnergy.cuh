@@ -34,8 +34,7 @@ __GEIGEN__::Matrix3x3d computePEPF_ARAP_double(const __GEIGEN__::Matrix3x3d& F, 
 __device__ 
 __GEIGEN__::Matrix9x9d __project_ANIOSI5_H_3D(const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double3& fiber_direction, const double& scale, const double& contract_length);
 
-__device__ 
-__GEIGEN__::Matrix3x3d __computePEPF_StableNHK3D_double(const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& Sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, double lengthRate, double volumRate);
+__device__ __GEIGEN__::Matrix3x3d __computePEPF_StableNHK3D_double(const __GEIGEN__::Matrix3x3d& F, const double& I2, const double& I3, double lengthRate, double volumRate);
 __device__
 __GEIGEN__::Matrix3x2d __computePEPF_BaraffWitkinStretch_double(const __GEIGEN__::Matrix3x2d& F, double stretchStiff, double shearStiff);
 __device__ 

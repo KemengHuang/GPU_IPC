@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "Eigen/Eigen"
 #include "device_utils.h"
+using namespace Eigen;
 namespace LibShell {
     __device__ __host__
         static Eigen::Matrix3d crossMatrix(Eigen::Vector3d v) {
@@ -268,13 +269,10 @@ __GEIGEN__::Matrix3x2d __computePEPF_BaraffWitkinStretch_double(const __GEIGEN__
     __GEIGEN__::Matrix3x2d PEPF = __GEIGEN__::__Mat3x2_add(__GEIGEN__::__S_Mat3x2_multiply(PEPF_shear, shearStiff), __GEIGEN__::__S_Mat3x2_multiply(PEPF_stretch, stretchStiff));
     return PEPF;
 }
-__device__
-__GEIGEN__::Matrix3x3d __computePEPF_StableNHK3D_double(const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& Sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, double lengthRate, double volumRate) {
-
-    double I3 = Sigma.m[0][0] * Sigma.m[1][1] * Sigma.m[2][2];
-    double I2 = Sigma.m[0][0] * Sigma.m[0][0] + Sigma.m[1][1] * Sigma.m[1][1] + Sigma.m[2][2] * Sigma.m[2][2];
-
-    double u = lengthRate, r = volumRate;
+__device__ __GEIGEN__::Matrix3x3d __computePEPF_StableNHK3D_double(
+    const __GEIGEN__::Matrix3x3d& F, const double& I2, const double& I3, double lengthRate, double volumRate)
+{
+    double                 u = lengthRate, r = volumRate;
     __GEIGEN__::Matrix3x3d pI3pF;
 
     pI3pF.m[0][0] = F.m[1][1] * F.m[2][2] - F.m[1][2] * F.m[2][1];
@@ -289,16 +287,12 @@ __GEIGEN__::Matrix3x3d __computePEPF_StableNHK3D_double(const __GEIGEN__::Matrix
     pI3pF.m[2][1] = F.m[0][2] * F.m[1][0] - F.m[0][0] * F.m[1][2];
     pI3pF.m[2][2] = F.m[0][0] * F.m[1][1] - F.m[0][1] * F.m[1][0];
 
-
-    //printf("volRate and LenRate:  %f    %f\n", volumRate, lengthRate);
-
     __GEIGEN__::Matrix3x3d PEPF, tempA, tempB;
-    tempA = __GEIGEN__::__S_Mat_multiply(F, u * (1 - 1 / (I2 + 1)));
-    tempB = __GEIGEN__::__S_Mat_multiply(pI3pF, (r * (I3 - 1 - u * 3 / (r * 4))));
+    tempA = __GEIGEN__::__S_Mat_multiply(F, u);
+    tempB = __GEIGEN__::__S_Mat_multiply(pI3pF, (r * (I3 - 1 - u / r)));
     __GEIGEN__::__Mat_add(tempA, tempB, PEPF);
     return PEPF;
 }
-
 __device__
 __GEIGEN__::Matrix3x3d computePEPF_ARAP_double(const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& Sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double& lengthRate)
 {
@@ -491,107 +485,6 @@ __GEIGEN__::Matrix6x6d __project_BaraffWitkinShear_H(const __GEIGEN__::Matrix3x2
     return Tmp;
 }
 
-__device__ 
-__GEIGEN__::Matrix9x9d __project_StabbleNHK_H_3D(const double3& sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double& lengthRate, const double& volumRate, __GEIGEN__::Matrix9x9d& H) {
-    double sigxx = sigma.x * sigma.x;
-    double sigyy = sigma.y * sigma.y;
-    double sigzz = sigma.z * sigma.z;
-
-    double I3 = sigma.x * sigma.y * sigma.z;
-    double I2 = sigxx + sigyy + sigzz;
-    double g2 = sigxx*sigyy + sigxx*sigzz + sigyy*sigzz;
-
-    double u = lengthRate, r = volumRate;
-
-    double n = 2 * u / ((I2 + 1) * (I2 + 1) * (r * (I3 - 1) - 3 * u / 4));
-    double p = r / (r * (I3 - 1) - 3 * u / 4);
-    double c2 = -g2 * p - I2 * n;
-    double c1 = -(1 + 2 * I3 * p) * I2 - 6 * I3 * n + (g2 * I2 - 9 * I3 * I3) * p * n;
-    double c0 = -(2 + 3 * I3 * p) * I3 + (I2 * I2 - 4 * g2) * n + 2 * I3 * p * n * (I2 * I2 - 3 * g2);
-
-    double roots[3] = { 0 };
-    int num_solution = 0;
-    __GEIGEN__::__NewtonSolverForCubicEquation_satbleNeohook(1, c2, c1, c0, roots, num_solution, 1e-6);
-
-    __GEIGEN__::Matrix3x3d D[3], M_temp[3];
-    double q[3];
-    __GEIGEN__::Matrix3x3d Q[9];
-    double lamda[9];
-    double Ut = u * (1 - 1 / (I2 + 1));
-    double alpha = 1 + 3 * u / r / 4;
-
-    double I3minuAlphaDotR = (I3 - alpha)*r;
-
-    for (int i = 0; i < num_solution; i++) {
-        double alpha0 = roots[i] * (sigma.y + sigma.x * sigma.z * n + I3 * sigma.y * p) +
-                        sigma.x * sigma.z + sigma.y * (sigxx - sigyy + sigzz) * n +
-                        I3 * sigma.x * sigma.z * p +
-                        sigma.x * (sigxx - sigyy) * sigma.z *
-                        (sigyy - sigzz) * p * n;
-
-        double alpha1 = roots[i] * (sigma.x + sigma.y * sigma.z * n + I3 * sigma.x * p) +
-                        sigma.y * sigma.z - sigma.x * (sigxx - sigyy - sigzz) * n +
-                        I3 * sigma.y * sigma.z * p -
-                        sigma.y * (sigxx - sigyy) * sigma.z *
-                        (sigxx - sigzz) * p * n;
-
-        double alpha2 = roots[i] * roots[i] - roots[i] * (sigxx + sigyy) * (n + sigzz * p) -
-                        sigzz - 2 * I3 * n - 2 * I3 * sigzz * p +
-                        ((sigxx - sigyy) * sigma.z) * ((sigxx - sigyy) * sigma.z) * p * n;
-
-        double normalSum = alpha0 * alpha0 + alpha1 * alpha1 + alpha2 * alpha2;
-
-        if (normalSum == 0) {
-            lamda[i] = 0; continue;
-        }
-
-        q[i] = 1 / sqrt(normalSum);
-        __GEIGEN__::__set_Mat_val(D[i], alpha0, 0, 0, 0, alpha1, 0, 0, 0, alpha2);
-
-        __GEIGEN__::__s_M_Mat_MT_multiply(U, D[i], V, q[i], Q[i]);
-        lamda[i] = I3minuAlphaDotR * roots[i] + Ut;
-    }
-
-
-    lamda[3] = Ut + sigma.z * I3minuAlphaDotR;
-    lamda[4] = Ut + sigma.x * I3minuAlphaDotR;
-    lamda[5] = Ut + sigma.y * I3minuAlphaDotR;
-
-    lamda[6] = Ut - sigma.z * I3minuAlphaDotR;
-    lamda[7] = Ut - sigma.x * I3minuAlphaDotR;
-    lamda[8] = Ut - sigma.y * I3minuAlphaDotR;
-
-    __GEIGEN__::__set_Mat_val(Q[3], 0, -1, 0, 1, 0, 0, 0, 0, 0);
-    __GEIGEN__::__set_Mat_val(Q[4], 0, 0, 0, 0, 0, 1, 0, -1, 0);
-    __GEIGEN__::__set_Mat_val(Q[5], 0, 0, 1, 0, 0, 0, -1, 0, 0);
-    __GEIGEN__::__set_Mat_val(Q[6], 0, 1, 0, 1, 0, 0, 0, 0, 0);
-    __GEIGEN__::__set_Mat_val(Q[7], 0, 0, 0, 0, 0, 1, 0, 1, 0);
-    __GEIGEN__::__set_Mat_val(Q[8], 0, 0, 1, 0, 0, 0, 1, 0, 0);
-
-    double ml = 1 / sqrt(2.0);
-
-    M_temp[1] = __GEIGEN__::__Transpose3x3(V);
-    for (int i = 3;i < 9;i++) {
-        __GEIGEN__::__M_Mat_multiply(U, Q[i], M_temp[0]);
-        __GEIGEN__::__M_Mat_multiply(M_temp[0], M_temp[1], M_temp[2]);
-        Q[i] = __GEIGEN__::__S_Mat_multiply(M_temp[2], ml);
-
-        //Q[i] = __GEIGEN__::__s_M_Mat_MT_multiply(U, Q[i], V, ml);
-    }
-
-    __GEIGEN__::Matrix9x9d M9_temp;
-    __GEIGEN__::__init_Mat9x9(H, 0);
-    __GEIGEN__::Vector9 V9_temp;
-    for (int i = 0; i < 9; i++) {
-        if (lamda[i] > 0) {
-            V9_temp = __GEIGEN__::__Mat3x3_to_vec9_double(Q[i]);
-            M9_temp = __GEIGEN__::__v9_vec9_toMat9x9(V9_temp, V9_temp, lamda[i]);
-            H = __GEIGEN__::__Mat9x9_add(H, M9_temp);
-        }
-    }
-}
-
-
 
 __device__ 
 __GEIGEN__::Matrix9x9d __project_ANIOSI5_H_3D(const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double3& fiber_direction, const double& scale, const double& contract_length) {
@@ -753,23 +646,13 @@ double __cal_StabbleNHK_energy_3D(const double3* vertexes, const uint4& tetrahed
     __calculateDms3D_double(vertexes, tetrahedra, Ds);
     __GEIGEN__::Matrix3x3d F;
     __M_Mat_multiply(Ds, DmInverse, F);
-    //printf("%f  %f  %f\n%f  %f  %f\n%f  %f  %f\n\n\n\n\n\n", F.m[0][0], F.m[0][1], F.m[0][2], F.m[1][0], F.m[1][1], F.m[1][2], F.m[2][0], F.m[2][1], F.m[2][2]);
-    __GEIGEN__::Matrix3x3d U, V, sigma, S;
-    __GEIGEN__::Matrix3x3d M_Temp0, M_Temp1;
-    SVD(F, U, V, sigma);
-    //printf("%f  %f  %f\n%f  %f  %f\n%f  %f  %f\n\n\n\n\n\n", V.m[0][0], V.m[0][1], V.m[0][2], V.m[1][0], V.m[1][1], V.m[1][2], V.m[2][0], V.m[2][1], V.m[2][2]);
-    //printf("%f  %f  %f\n%f  %f  %f\n%f  %f  %f\n\n\n\n\n\n", U.m[0][0], U.m[0][1], U.m[0][2], U.m[1][0], U.m[1][1], U.m[1][2], U.m[2][0], U.m[2][1], U.m[2][2]);
-    __GEIGEN__::__M_Mat_multiply(V, sigma, M_Temp0);
-    M_Temp1 = __GEIGEN__::__Transpose3x3(V);
-    __GEIGEN__::__M_Mat_multiply(M_Temp0, M_Temp1, S);
 
-    __GEIGEN__::__M_Mat_multiply(S, S, M_Temp0);
-    double I2 = __GEIGEN__::__Mat_Trace(M_Temp0);
-    double I3;
-    __GEIGEN__::__Determiant(S, I3);
-    //printf("%f     %f\n\n\n", I2, I3);
-    return (0.5 * lenRate * (I2 - 3) + 0.5 * volRate * (I3 - 1 - 3 * lenRate / 4 / volRate) * (I3 - 1 - 3 * lenRate / 4 / volRate) - 0.5 * lenRate * log(I2 + 1) /*- (0.5 * volRate * (3 * lenRate / 4 / volRate) * (3 * lenRate / 4 / volRate) - 0.5 * lenRate * log(4.0))*/) * volume;
-    //printf("I2   I3   ler  volr\n", I2, I3, lenRate, volRate);
+
+    double I2 = __GEIGEN__::__squaredNorm(F);
+    double I3 = __GEIGEN__::__Determiant(F);
+
+    double Jminus1 = I3 - 1 - lenRate / volRate;
+    return 0.5 * (lenRate * (I2 - 3) + volRate * (Jminus1 * Jminus1)) * volume;
 }
 
 __device__
@@ -1030,102 +913,155 @@ __GEIGEN__::Matrix9x12d __computePFPX3D_double(const __GEIGEN__::Matrix3x3d& Inv
 }
 
 
+__device__ void BuildTwistAndFlipEigenvectors(const Matrix3d&       U,
+                                              const Matrix3d&       V,
+                                              Matrix<double, 9, 9>& Q)
+{
+    const double   scale = 1.0 / std::sqrt(2.0);
+    const Matrix3d sV    = scale * V;
 
+    using M3 = Eigen::Matrix<double, 3, 3, Eigen::ColMajor>;
 
-__device__
-void __project_StabbleNHK_H_3D_makePD(__GEIGEN__::Matrix9x9d& H, const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double& lengthRate, const double& volumRate) {
+    M3 A;
+    A << sV(0, 2) * U(0, 1), sV(1, 2) * U(0, 1), sV(2, 2) * U(0, 1),
+        sV(0, 2) * U(1, 1), sV(1, 2) * U(1, 1), sV(2, 2) * U(1, 1),
+        sV(0, 2) * U(2, 1), sV(1, 2) * U(2, 1), sV(2, 2) * U(2, 1);
 
-    double I3 = sigma.m[0][0] * sigma.m[1][1] * sigma.m[2][2];
-    double Ic = sigma.m[0][0] * sigma.m[0][0] + sigma.m[1][1] * sigma.m[1][1] + sigma.m[2][2] * sigma.m[2][2];
+    M3 B;
+    B << sV(0, 1) * U(0, 2), sV(1, 1) * U(0, 2), sV(2, 1) * U(0, 2),
+        sV(0, 1) * U(1, 2), sV(1, 1) * U(1, 2), sV(2, 1) * U(1, 2),
+        sV(0, 1) * U(2, 2), sV(1, 1) * U(2, 2), sV(2, 1) * U(2, 2);
 
-    double u = lengthRate, r = volumRate;
+    M3 C;
+    C << sV(0, 2) * U(0, 0), sV(1, 2) * U(0, 0), sV(2, 2) * U(0, 0),
+        sV(0, 2) * U(1, 0), sV(1, 2) * U(1, 0), sV(2, 2) * U(1, 0),
+        sV(0, 2) * U(2, 0), sV(1, 2) * U(2, 0), sV(2, 2) * U(2, 0);
 
-    __GEIGEN__::Matrix9x9d H1, HJ;//, M9_temp[2];
-    __GEIGEN__::__identify_Mat9x9(H1);
-    H1 = __GEIGEN__::__S_Mat9x9_multiply(H1, 2);
-    __GEIGEN__::Vector9 g = __GEIGEN__::__Mat3x3_to_vec9_double(F);
+    M3 D;
+    D << sV(0, 0) * U(0, 2), sV(1, 0) * U(0, 2), sV(2, 0) * U(0, 2),
+        sV(0, 0) * U(1, 2), sV(1, 0) * U(1, 2), sV(2, 0) * U(1, 2),
+        sV(0, 0) * U(2, 2), sV(1, 0) * U(2, 2), sV(2, 0) * U(2, 2);
 
-    __GEIGEN__::Vector9 gJ;
-    double3 gjc0 = __GEIGEN__::__v_vec_cross(make_double3(g.v[3], g.v[4], g.v[5]), make_double3(g.v[6], g.v[7], g.v[8]));
-    double3 gjc1 = __GEIGEN__::__v_vec_cross(make_double3(g.v[6], g.v[7], g.v[8]), make_double3(g.v[0], g.v[1], g.v[2]));
-    double3 gjc2 = __GEIGEN__::__v_vec_cross(make_double3(g.v[0], g.v[1], g.v[2]), make_double3(g.v[3], g.v[4], g.v[5]));
-    g = __GEIGEN__::__s_vec9_multiply(g, 2);
-    gJ.v[0] = gjc0.x;gJ.v[1] = gjc0.y;gJ.v[2] = gjc0.z;
-    gJ.v[3] = gjc1.x;gJ.v[4] = gjc1.y;gJ.v[5] = gjc1.z;
-    gJ.v[6] = gjc2.x;gJ.v[7] = gjc2.y;gJ.v[8] = gjc2.z;
+    M3 E;
+    E << sV(0, 1) * U(0, 0), sV(1, 1) * U(0, 0), sV(2, 1) * U(0, 0),
+        sV(0, 1) * U(1, 0), sV(1, 1) * U(1, 0), sV(2, 1) * U(1, 0),
+        sV(0, 1) * U(2, 0), sV(1, 1) * U(2, 0), sV(2, 1) * U(2, 0);
 
-    __GEIGEN__::Matrix3x3d f0hat;
-    __GEIGEN__::__set_Mat_val(f0hat, 0, -F.m[2][0], F.m[1][0], F.m[2][0], 0, -F.m[0][0], -F.m[1][0], F.m[0][0], 0);
+    M3 F;
+    F << sV(0, 0) * U(0, 1), sV(1, 0) * U(0, 1), sV(2, 0) * U(0, 1),
+        sV(0, 0) * U(1, 1), sV(1, 0) * U(1, 1), sV(2, 0) * U(1, 1),
+        sV(0, 0) * U(2, 1), sV(1, 0) * U(2, 1), sV(2, 0) * U(2, 1);
 
-    __GEIGEN__::Matrix3x3d f1hat;
-    __GEIGEN__::__set_Mat_val(f1hat, 0, -F.m[2][1], F.m[1][1], F.m[2][1], 0, -F.m[0][1], -F.m[1][1], F.m[0][1], 0);
+    // Twist eigenvectors
+    Eigen::Map<M3>(Q.data())      = B - A;
+    Eigen::Map<M3>(Q.data() + 9)  = D - C;
+    Eigen::Map<M3>(Q.data() + 18) = F - E;
 
-    __GEIGEN__::Matrix3x3d f2hat;
-    __GEIGEN__::__set_Mat_val(f2hat, 0, -F.m[2][2], F.m[1][2], F.m[2][2], 0, -F.m[0][2], -F.m[1][2], F.m[0][2], 0);
-
-    HJ.m[0][0] = 0;HJ.m[0][1] = 0;HJ.m[0][2] = 0;
-    HJ.m[1][0] = 0;HJ.m[1][1] = 0;HJ.m[1][2] = 0;
-    HJ.m[2][0] = 0;HJ.m[2][1] = 0;HJ.m[2][2] = 0;
-
-    HJ.m[0][3] = -f2hat.m[0][0];HJ.m[0][4] = -f2hat.m[0][1];HJ.m[0][5] = -f2hat.m[0][2];
-    HJ.m[1][3] = -f2hat.m[1][0];HJ.m[1][4] = -f2hat.m[1][1];HJ.m[1][5] = -f2hat.m[1][2];
-    HJ.m[2][3] = -f2hat.m[2][0];HJ.m[2][4] = -f2hat.m[2][1];HJ.m[2][5] = -f2hat.m[2][2];
-
-    HJ.m[0][6] = f1hat.m[0][0];HJ.m[0][7] = f1hat.m[0][1];HJ.m[0][8] = f1hat.m[0][2];
-    HJ.m[1][6] = f1hat.m[1][0];HJ.m[1][7] = f1hat.m[1][1];HJ.m[1][8] = f1hat.m[1][2];
-    HJ.m[2][6] = f1hat.m[2][0];HJ.m[2][7] = f1hat.m[2][1];HJ.m[2][8] = f1hat.m[2][2];
-
-    HJ.m[3][0] = f2hat.m[0][0];HJ.m[3][1] = f2hat.m[0][1];HJ.m[3][2] = f2hat.m[0][2];
-    HJ.m[4][0] = f2hat.m[1][0];HJ.m[4][1] = f2hat.m[1][1];HJ.m[4][2] = f2hat.m[1][2];
-    HJ.m[5][0] = f2hat.m[2][0];HJ.m[5][1] = f2hat.m[2][1];HJ.m[5][2] = f2hat.m[2][2];
-
-    HJ.m[3][3] = 0;HJ.m[3][4] = 0;HJ.m[3][5] = 0;
-    HJ.m[4][3] = 0;HJ.m[4][4] = 0;HJ.m[4][5] = 0;
-    HJ.m[5][3] = 0;HJ.m[5][4] = 0;HJ.m[5][5] = 0;
-
-    HJ.m[3][6] = -f0hat.m[0][0];HJ.m[3][7] = -f0hat.m[0][1];HJ.m[3][8] = -f0hat.m[0][2];
-    HJ.m[4][6] = -f0hat.m[1][0];HJ.m[4][7] = -f0hat.m[1][1];HJ.m[4][8] = -f0hat.m[1][2];
-    HJ.m[5][6] = -f0hat.m[2][0];HJ.m[5][7] = -f0hat.m[2][1];HJ.m[5][8] = -f0hat.m[2][2];
-
-    HJ.m[6][0] = -f1hat.m[0][0];HJ.m[6][1] = -f1hat.m[0][1];HJ.m[6][2] = -f1hat.m[0][2];
-    HJ.m[7][0] = -f1hat.m[1][0];HJ.m[7][1] = -f1hat.m[1][1];HJ.m[7][2] = -f1hat.m[1][2];
-    HJ.m[8][0] = -f1hat.m[2][0];HJ.m[8][1] = -f1hat.m[2][1];HJ.m[8][2] = -f1hat.m[2][2];
-
-    HJ.m[6][3] = f0hat.m[0][0];HJ.m[6][4] = f0hat.m[0][1];HJ.m[6][5] = f0hat.m[0][2];
-    HJ.m[7][3] = f0hat.m[1][0];HJ.m[7][4] = f0hat.m[1][1];HJ.m[7][5] = f0hat.m[1][2];
-    HJ.m[8][3] = f0hat.m[2][0];HJ.m[8][4] = f0hat.m[2][1];HJ.m[8][5] = f0hat.m[2][2];
-
-    HJ.m[6][6] = 0;HJ.m[6][7] = 0;HJ.m[6][8] = 0;
-    HJ.m[7][6] = 0;HJ.m[7][7] = 0;HJ.m[7][8] = 0;
-    HJ.m[8][6] = 0;HJ.m[8][7] = 0;HJ.m[8][8] = 0;
-
-    double J = I3;
-    double mu = u, lambda = r;
-    H = __GEIGEN__::__Mat9x9_add(__GEIGEN__::__S_Mat9x9_multiply(H1, (Ic * mu) / (2 * (Ic + 1))), __GEIGEN__::__S_Mat9x9_multiply(HJ, lambda * (J - 1 - (3 * mu) / (4.0 * lambda))));
-
-    H = __GEIGEN__::__Mat9x9_add(H, __GEIGEN__::__v9_vec9_toMat9x9(g, g, (mu / (2 * (Ic + 1) * (Ic + 1)))));
-
-    H = __GEIGEN__::__Mat9x9_add(H, __GEIGEN__::__v9_vec9_toMat9x9(gJ, gJ,lambda));
-
-    Eigen::Matrix<double, 9, 9> mat9;
-    for (int i = 0; i != 9; ++i)
-        for (int j = 0; j != 9; ++j)
-            mat9(i, j) = H.m[i][j];
-
-    PDSNK<double, 9>(mat9);
-
-    for (int i = 0; i != 9; ++i)
-        for (int j = 0; j != 9; ++j)
-            H.m[i][j] = mat9(i, j);
-
+    // Flip eigenvectors
+    Eigen::Map<M3>(Q.data() + 27) = A + B;
+    Eigen::Map<M3>(Q.data() + 36) = C + D;
+    Eigen::Map<M3>(Q.data() + 45) = E + F;
 }
 
-__global__
-void _calculate_fem_gradient_hessian(__GEIGEN__::Matrix3x3d* DmInverses, const double3* vertexes, const uint4* tetrahedras,
-    __GEIGEN__::Matrix12x12d* Hessians, uint32_t offset, const double* volume, double3* gradient, int tetrahedraNum, double lenRate, double volRate, double IPC_dt)
+__device__ Eigen::Matrix<double, 9, 9> __project_StabbleNHK_H_3D_makePD(
+    __GEIGEN__::Matrix9x9d& H,
+                                                                  double I3,
+                                                                  const double& mu,
+                                                                  const double& lambda,
+                                                                  const __GEIGEN__::Matrix3x3d& FF)
+{
+    Eigen::Matrix<double, 3, 3> F, U, V;
+    Eigen::Matrix<double, 3, 1> S;
+    for(int i = 0; i < 3; i++)
+    {
+        for(int j = 0; j < 3; j++)
+        {
+            F(i, j) = FF.m[i][j];
+        }
+    }
+
+    __GEIGEN__::math::qr_svd(F, S, U, V);
+
+
+    Vector<double, 9>    eigenvalues;
+    Matrix<double, 9, 9> eigenvectors;
+
+    const double J = I3;
+
+    // Compute the twist and flip eigenvalues
+    {
+        // Twist eigenvalues
+        eigenvalues.segment<3>(0) = S;
+        // Flip eigenvalues
+        eigenvalues.segment<3>(3) = -S;
+        const double evScale      = lambda * (J - 1.0) - mu;
+        eigenvalues.segment<6>(0) *= evScale;
+        eigenvalues.segment<6>(0).array() += mu;
+    }
+
+    // Compute the twist and flip eigenvectors
+    BuildTwistAndFlipEigenvectors(U, V, eigenvectors);
+
+    // Compute the remaining three eigenvalues and eigenvectors
+    {
+        Matrix3d     A;
+        const double s0s0    = S(0) * S(0);
+        const double s1s1    = S(1) * S(1);
+        const double s2s2    = S(2) * S(2);
+        A(0, 0)              = mu + lambda * s1s1 * s2s2;
+        A(1, 1)              = mu + lambda * s0s0 * s2s2;
+        A(2, 2)              = mu + lambda * s0s0 * s1s1;
+        const double evScale = lambda * (2.0 * J - 1.0) - mu;
+        A(0, 1)              = evScale * S(2);
+        A(1, 0)              = A(0, 1);
+        A(0, 2)              = evScale * S(1);
+        A(2, 0)              = A(0, 2);
+        A(1, 2)              = evScale * S(0);
+        A(2, 1)              = A(1, 2);
+
+        Eigen::SelfAdjointEigenSolver<Matrix3d> Aeigs;
+        Aeigs.computeDirect(A);
+        eigenvalues.segment<3>(6) = Aeigs.eigenvalues();
+
+        Eigen::Map<Matrix3d>(eigenvectors.data() + 54) =
+            U * Aeigs.eigenvectors().col(0).asDiagonal() * V.transpose();
+        Eigen::Map<Matrix3d>(eigenvectors.data() + 63) =
+            U * Aeigs.eigenvectors().col(1).asDiagonal() * V.transpose();
+        Eigen::Map<Matrix3d>(eigenvectors.data() + 72) =
+            U * Aeigs.eigenvectors().col(2).asDiagonal() * V.transpose();
+    }
+
+    // Clamp the eigenvalues
+    for(int i = 0; i < 9; i++)
+    {
+        if(eigenvalues(i) < 0.0)
+        {
+            eigenvalues(i) = 0.0;
+        }
+    }
+    Matrix<double, 9, 9> tempMat =
+        eigenvectors * eigenvalues.asDiagonal() * eigenvectors.transpose();
+
+    for(int i = 0; i != 9; ++i)
+        for(int j = 0; j != 9; ++j)
+            H.m[i][j] = tempMat(i, j);
+}
+
+__global__ void _calculate_fem_gradient_hessian(__GEIGEN__::Matrix3x3d* DmInverses,
+                                                const double3* vertexes,
+                                                const uint4*   tetrahedras,
+                                                __GEIGEN__::Matrix12x12d* Hessians,
+                                                uint32_t      offset,
+                                                const double* volume,
+                                                double3*      gradient,
+                                                int           tetrahedraNum,
+                                                double lenRate,
+                                                double volRate,
+                                                double        IPC_dt)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= tetrahedraNum) return;
+    if(idx >= tetrahedraNum)
+        return;
 
     __GEIGEN__::Matrix9x12d PFPX = __computePFPX3D_double(DmInverses[idx]);
 
@@ -1134,13 +1070,16 @@ void _calculate_fem_gradient_hessian(__GEIGEN__::Matrix3x3d* DmInverses, const d
     __GEIGEN__::Matrix3x3d F;
     __M_Mat_multiply(Ds, DmInverses[idx], F);
 
+    double I2 = __GEIGEN__::__squaredNorm(F);
+    double I3 = __GEIGEN__::__Determiant(F);
+#ifdef USE_SNK
+    __GEIGEN__::Matrix3x3d Iso_PEPF =
+        __computePEPF_StableNHK3D_double(F, I2, I3, lenRate, volRate);
+#else
     __GEIGEN__::Matrix3x3d U, V, Sigma;
     SVD(F, U, V, Sigma);
-
-#ifdef USE_SNK
-    __GEIGEN__::Matrix3x3d Iso_PEPF = __computePEPF_StableNHK3D_double(F, Sigma, U, V, lenRate, volRate);
-#else
-    __GEIGEN__::Matrix3x3d Iso_PEPF = computePEPF_ARAP_double(F, Sigma, U, V, lenRate);
+    __GEIGEN__::Matrix3x3d Iso_PEPF =
+        computePEPF_ARAP_double(F, Sigma, U, V, lenRate);
 #endif
 
 
@@ -1149,10 +1088,10 @@ void _calculate_fem_gradient_hessian(__GEIGEN__::Matrix3x3d* DmInverses, const d
     __GEIGEN__::Vector9 pepf = __GEIGEN__::__Mat3x3_to_vec9_double(PEPF);
 
 
-
-
     __GEIGEN__::Matrix12x9d PFPXTranspose = __GEIGEN__::__Transpose9x12(PFPX);
-    __GEIGEN__::Vector12 f = __GEIGEN__::__s_vec12_multiply(__GEIGEN__::__M12x9_v9_multiply(PFPXTranspose, pepf), IPC_dt * IPC_dt * volume[idx]);
+    __GEIGEN__::Vector12    f =
+        __GEIGEN__::__s_vec12_multiply(__GEIGEN__::__M12x9_v9_multiply(PFPXTranspose, pepf),
+                                       IPC_dt * IPC_dt * volume[idx]);
     //printf("%f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f  %f\n", f.v[0], f.v[1], f.v[2], f.v[3], f.v[4], f.v[5], f.v[6], f.v[7], f.v[8], f.v[9], f.v[10], f.v[11]);
 
     {
@@ -1175,19 +1114,17 @@ void _calculate_fem_gradient_hessian(__GEIGEN__::Matrix3x3d* DmInverses, const d
 
 #ifdef USE_SNK
     __GEIGEN__::Matrix9x9d Hq;
-    //__project_StabbleNHK_H_3D(make_double3(Sigma.m[0][0], Sigma.m[1][1], Sigma.m[2][2]), U, V, lenRate, volRate,Hq);
-
-    __project_StabbleNHK_H_3D_makePD(Hq, F, Sigma, U, V, lenRate, volRate);
+    __project_StabbleNHK_H_3D_makePD(Hq, I3, lenRate, volRate, F);
 #else
     __GEIGEN__::Matrix9x9d Hq = project_ARAP_H_3D(Sigma, U, V, lenRate);
 #endif
-
 
     __GEIGEN__::Matrix12x12d H;
 
     __GEIGEN__::__M12x9_S9x9_MT9x12_Multiply(PFPXTranspose, Hq, H);
 
-    Hessians[idx + offset] = __GEIGEN__::__s_M12x12_Multiply(H, volume[idx] * IPC_dt * IPC_dt);
+    Hessians[idx + offset] =
+        __GEIGEN__::__s_M12x12_Multiply(H, volume[idx] * IPC_dt * IPC_dt);
 }
 
 
@@ -1278,12 +1215,19 @@ void _calculate_triangle_fem_gradient(__GEIGEN__::Matrix2x2d* trimInverses, cons
     }
 }
 
-__global__
-void _calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses, const double3* vertexes, const uint4* tetrahedras,
-    const double* volume, double3* gradient, int tetrahedraNum, double lenRate, double volRate, double dt)
+__global__ void _calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses,
+                                        const double3*          vertexes,
+                                        const uint4*            tetrahedras,
+                                        const double*           volume,
+                                        double3*                gradient,
+                                        int                     tetrahedraNum,
+                                        double                 lenRate,
+                                        double                 volRate,
+                                        double                  dt)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= tetrahedraNum) return;
+    if(idx >= tetrahedraNum)
+        return;
 
     __GEIGEN__::Matrix9x12d PFPX = __computePFPX3D_double(DmInverses[idx]);
 
@@ -1292,15 +1236,17 @@ void _calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses, const double3* 
     __GEIGEN__::Matrix3x3d F;
     __M_Mat_multiply(Ds, DmInverses[idx], F);
 
+    double                 I2 = __GEIGEN__::__squaredNorm(F);
+    double                 I3 = __GEIGEN__::__Determiant(F);
+#ifdef USE_SNK
+    __GEIGEN__::Matrix3x3d Iso_PEPF =
+        __computePEPF_StableNHK3D_double(F, I2, I3, lenRate, volRate);
+#else
     __GEIGEN__::Matrix3x3d U, V, Sigma;
     SVD(F, U, V, Sigma);
-    //printf("%f %f\n\n\n", lenRate, volRate);
-#ifdef USE_SNK
-    __GEIGEN__::Matrix3x3d Iso_PEPF = __computePEPF_StableNHK3D_double(F, Sigma, U, V, lenRate, volRate);
-#else
-    __GEIGEN__::Matrix3x3d Iso_PEPF = computePEPF_ARAP_double(F, Sigma, U, V, lenRate);
+    __GEIGEN__::Matrix3x3d Iso_PEPF =
+        computePEPF_ARAP_double(F, Sigma, U, V, lenRate);
 #endif
-
 
 
     __GEIGEN__::Matrix3x3d PEPF = Iso_PEPF;
@@ -1311,7 +1257,8 @@ void _calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses, const double3* 
 
     __GEIGEN__::Vector12 f = __GEIGEN__::__M12x9_v9_multiply(PFPXTranspose, pepf);
 
-    for (int i = 0; i < 12; i++) {
+    for(int i = 0; i < 12; i++)
+    {
         f.v[i] = volume[idx] * f.v[i] * dt * dt;
     }
 
@@ -1336,9 +1283,6 @@ void _calculate_fem_gradient(__GEIGEN__::Matrix3x3d* DmInverses, const double3* 
 
 
 
-
-
-using namespace Eigen;
 __global__
 void _calculate_bending_gradient_hessian(const double3* vertexes, const double3* rest_vertexes, const uint2* edges, const uint2* edges_adj_vertex,
     __GEIGEN__::Matrix12x12d* Hessians, uint4* Indices, uint32_t offset, double3* gradient, int edgeNum, double bendStiff, double IPC_dt)
