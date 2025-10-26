@@ -98,7 +98,6 @@ target_compile_definitions(gipc PRIVATE
     GIPC_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Assets/"    # Assets directory path
     GIPC_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Output/"    # Output directory path
     USE_SNK                   # Enable SNK feature
-    SVD_DOUBLE               # Use double precision for SVD
     ADAPTIVE_KAPPA           # Enable adaptive kappa
 )
 
