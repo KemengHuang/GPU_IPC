@@ -9036,9 +9036,10 @@ void GIPC::calFrictionHessian(device_TetraData& TetMesh)
     }
 
     numbers = h_gpNum_last;
+    CUDA_SAFE_CALL(cudaMemcpy(_gpNum, &h_gpNum_last, sizeof(uint32_t), cudaMemcpyHostToDevice));
     if(numbers < 1)
         return;
-    CUDA_SAFE_CALL(cudaMemcpy(_gpNum, &h_gpNum_last, sizeof(uint32_t), cudaMemcpyHostToDevice));
+    
     blockNum = (numbers + threadNum - 1) / threadNum;
 
     _calFrictionHessian_gd<<<blockNum, threadNum>>>(_vertexes,
