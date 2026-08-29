@@ -9,12 +9,14 @@
 #include "mlbvh.cuh"
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 #include "cuda_tools.h"
 #include "cuda_cub_wrappers.h"
 #include<iostream>
 #include<fstream>
 #include "gpu_eigen_libs.cuh"
 #include "device_utils.h"
+#include <cub/block/block_reduce.cuh>
 
 __global__ void fill_bvh_indices(uint32_t* indices, int number)
 {
@@ -867,91 +869,28 @@ inline void _checkEEintersection(const double3* _vertexes, const double3* _rest_
     }
 }
 
-__global__
-void _reduct_max_box(AABB* _leafBoxes, int number) {
-    int idof = blockIdx.x * blockDim.x;
-    int idx = threadIdx.x + idof;
+struct MergeAABB {
+    __device__ AABB operator()(AABB lhs, const AABB& rhs) const {
+        lhs.combines(rhs);
+        return lhs;
+    }
+};
 
-    extern __shared__ AABB tep[];
+__global__ void _reduct_max_box(const AABB* input, AABB* output, int number) {
+    const int block_begin = blockIdx.x * blockDim.x;
+    const int idx = block_begin + threadIdx.x;
+    const int remaining = number - block_begin;
+    const int valid_items = remaining < static_cast<int>(blockDim.x)
+                                ? remaining
+                                : static_cast<int>(blockDim.x);
 
-    if (idx >= number) return;
-    //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
-    AABB temp = _leafBoxes[idx];
+    AABB value{};
+    if (idx < number) value = input[idx];
 
-    gipc::THREAD_FENCE();
-
-    double xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
-    double xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
-    //printf("%f   %f    %f   %f   %f    %f\n", xmin, ymin, zmin, xmax, ymax, zmax);
-    //printf("%f   %f    %f\n", xmax, ymax, zmax);
-    int warpTid = threadIdx.x % 32;
-    int warpId = (threadIdx.x >> 5);
-    int warpNum;
-    int tidNum = 32;
-    if (blockIdx.x == gridDim.x - 1) {
-        warpNum = ((number - idof + 31) >> 5);
-        if (warpId == warpNum - 1) {
-            tidNum = number - idof - (warpNum - 1) * 32;
-        }
-    }
-    else {
-        warpNum = ((blockDim.x) >> 5);
-    }
-    const unsigned int warp_mask =
-        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(tidNum));
-    for (int i = 1; i < tidNum; i = (i << 1)) {
-        const double other_xmin = gipc::WARP_SHFL_DOWN(xmin, i, warp_mask);
-        const double other_ymin = gipc::WARP_SHFL_DOWN(ymin, i, warp_mask);
-        const double other_zmin = gipc::WARP_SHFL_DOWN(zmin, i, warp_mask);
-        const double other_xmax = gipc::WARP_SHFL_DOWN(xmax, i, warp_mask);
-        const double other_ymax = gipc::WARP_SHFL_DOWN(ymax, i, warp_mask);
-        const double other_zmax = gipc::WARP_SHFL_DOWN(zmax, i, warp_mask);
-        if (warpTid + i < tidNum) {
-            temp.combines(other_xmin,
-                          other_ymin,
-                          other_zmin,
-                          other_xmax,
-                          other_ymax,
-                          other_zmax);
-            xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
-            xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
-        }
-    }
-    if (warpTid == 0) {
-        tep[warpId] = temp;
-    }
-    gipc::SYNC_THREADS();
-    if (threadIdx.x >= warpNum) return;
-    if (warpNum > 1) {
-        //	tidNum = warpNum;
-        temp = tep[threadIdx.x];
-        xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
-        xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
-        //	warpNum = ((tidNum + 31) >> 5);
-        const unsigned int aggregate_mask =
-            gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(warpNum));
-        for (int i = 1; i < warpNum; i = (i << 1)) {
-            const double other_xmin = gipc::WARP_SHFL_DOWN(xmin, i, aggregate_mask);
-            const double other_ymin = gipc::WARP_SHFL_DOWN(ymin, i, aggregate_mask);
-            const double other_zmin = gipc::WARP_SHFL_DOWN(zmin, i, aggregate_mask);
-            const double other_xmax = gipc::WARP_SHFL_DOWN(xmax, i, aggregate_mask);
-            const double other_ymax = gipc::WARP_SHFL_DOWN(ymax, i, aggregate_mask);
-            const double other_zmax = gipc::WARP_SHFL_DOWN(zmax, i, aggregate_mask);
-            if (threadIdx.x + i < warpNum) {
-                temp.combines(other_xmin,
-                              other_ymin,
-                              other_zmin,
-                              other_xmax,
-                              other_ymax,
-                              other_zmax);
-                xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
-                xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
-            }
-        }
-    }
-    if (threadIdx.x == 0) {
-        _leafBoxes[blockIdx.x] = temp;
-    }
+    using BlockReduce = cub::BlockReduce<AABB, default_threads>;
+    __shared__ typename BlockReduce::TempStorage storage;
+    value = BlockReduce(storage).Reduce(value, MergeAABB{}, valid_items);
+    if (threadIdx.x == 0) output[blockIdx.x] = value;
 }
 
 template <class element_type>
@@ -1390,36 +1329,32 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
 ///////////////////////////////////////host//////////////////////////////////////////////
 
 
-AABB calcMaxBV(AABB* _leafBoxes, AABB* _tempLeafBox, const int& number) {
+AABB calcMaxBV(AABB* _leafBoxes,
+               AABB* _tempLeafBox,
+               AABB* _reductionLeafBox,
+               const int& number) {
 
     int numbers = number;
     //if(numbers < 1)
     //    return;
     const unsigned int threadNum = default_threads;
-    int blockNum = (numbers + threadNum - 1) / threadNum;
-
-    unsigned int sharedMsize = sizeof(AABB) * (threadNum >> 5);
-
     //AABB* _tempLeafBox;
     //CUDA_SAFE_CALL(cudaMalloc((void**)&_tempLeafBox, number * sizeof(AABB)));
     CUDA_SAFE_CALL(cudaMemcpy(_tempLeafBox, _leafBoxes + number - 1, number * sizeof(AABB), cudaMemcpyDeviceToDevice));
     
-    _reduct_max_box << <blockNum, threadNum, sharedMsize >> > (_tempLeafBox, numbers);
-
-    numbers = blockNum;
-    blockNum = (numbers + threadNum - 1) / threadNum;
-
+    AABB* input  = _tempLeafBox;
+    AABB* output = _reductionLeafBox;
     while (numbers > 1) {
-        _reduct_max_box << <blockNum, threadNum, sharedMsize >> > (_tempLeafBox, numbers);
+        const int blockNum = (numbers + threadNum - 1) / threadNum;
+        _reduct_max_box<<<blockNum, threadNum>>>(input, output, numbers);
         numbers = blockNum;
-        blockNum = (numbers + threadNum - 1) / threadNum;
-
+        std::swap(input, output);
     }
     CUDA_SAFE_CALL(
-        cudaMemcpy(_leafBoxes, _tempLeafBox, sizeof(AABB), cudaMemcpyDeviceToDevice));
+        cudaMemcpy(_leafBoxes, input, sizeof(AABB), cudaMemcpyDeviceToDevice));
     AABB h_bv;
     CUDA_SAFE_CALL(
-        cudaMemcpy(&h_bv, _tempLeafBox, sizeof(AABB), cudaMemcpyDeviceToHost));
+        cudaMemcpy(&h_bv, input, sizeof(AABB), cudaMemcpyDeviceToHost));
     //CUDA_SAFE_CALL(cudaFree(_tempLeafBox));
     return h_bv;
 }
@@ -1551,6 +1486,7 @@ void lbvh::FREE_DEVICE_MEM() {
     _bvs.release();
     _flags.release();
     _tempLeafBox.release();
+    _reductionLeafBox.release();
 }
 
 void lbvh::MALLOC_DEVICE_MEM(const int& number) {
@@ -1564,6 +1500,9 @@ void lbvh::MALLOC_DEVICE_MEM(const int& number) {
     _nodes.resize(2 * static_cast<size_t>(number) - 1);
     _bvs.resize(2 * static_cast<size_t>(number) - 1);
     _tempLeafBox.resize(number);
+    const size_t reduction_blocks =
+        (static_cast<size_t>(number) + default_threads - 1) / default_threads;
+    _reductionLeafBox.resize_discard(reduction_blocks);
     _flags.resize(number > 1 ? static_cast<size_t>(number - 1) : 0);
 }
 
@@ -1619,7 +1558,7 @@ AABB* lbvh_f::getSceneSize() {
     }
     calcLeafBvs(_vertexes, _faces, _bvs, face_number, 0);
 
-    calcMaxBV(_bvs, _tempLeafBox, face_number);
+    calcMaxBV(_bvs, _tempLeafBox, _reductionLeafBox, face_number);
     return _bvs;
 }
 
@@ -1631,7 +1570,7 @@ double lbvh_f::Construct() {
     }
     calcLeafBvs(_vertexes, _faces, _bvs, face_number, 0);
     //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    scene = calcMaxBV(_bvs, _tempLeafBox, face_number);
+    scene = calcMaxBV(_bvs, _tempLeafBox, _reductionLeafBox, face_number);
     calcMChash(_MChash, _bvs, face_number);
     sort_morton_codes(face_number);
     sortBvs(_indices, _bvs, _tempLeafBox, face_number);
@@ -1649,7 +1588,7 @@ double lbvh_f::ConstructFullCCD(const double3* moveDir, const double& alpha) {
         std::abort();
     }
     calcLeafBvs_fullCCD(_vertexes, moveDir, alpha, _faces, _bvs, face_number, 0);
-    scene = calcMaxBV(_bvs, _tempLeafBox, face_number);
+    scene = calcMaxBV(_bvs, _tempLeafBox, _reductionLeafBox, face_number);
     calcMChash(_MChash, _bvs, face_number);
     sort_morton_codes(face_number);
     sortBvs(_indices, _bvs, _tempLeafBox, face_number);
@@ -1675,7 +1614,7 @@ double lbvh_e::Construct() {
 
     cudaEventRecord(start);*/
     calcLeafBvs(_vertexes, _edges, _bvs, edge_number, 1);
-    scene = calcMaxBV(_bvs, _tempLeafBox, edge_number);
+    scene = calcMaxBV(_bvs, _tempLeafBox, _reductionLeafBox, edge_number);
     calcMChash(_MChash, _bvs, edge_number);
     sort_morton_codes(edge_number);
     //cudaEventRecord(end0);
@@ -1709,7 +1648,7 @@ double lbvh_e::ConstructFullCCD(const double3* moveDir, const double& alpha) {
     if(edge_number == 0)
         return 0;
     calcLeafBvs_fullCCD(_vertexes, moveDir, alpha, _edges, _bvs, edge_number, 1);
-    scene = calcMaxBV(_bvs, _tempLeafBox, edge_number);
+    scene = calcMaxBV(_bvs, _tempLeafBox, _reductionLeafBox, edge_number);
     calcMChash(_MChash, _bvs, edge_number);
     sort_morton_codes(edge_number);
     sortBvs(_indices, _bvs, _tempLeafBox, edge_number);

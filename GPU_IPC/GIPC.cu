@@ -522,44 +522,6 @@ __global__ void _reduct_max_double3_to_double(const double3* _double3Dim, double
 }
 
 
-__global__ void _reduct_M_double2(double2* _double2Dim, int number)
-{
-    int idof = blockIdx.x * blockDim.x;
-    int idx  = threadIdx.x + idof;
-
-    extern __shared__ double2 sdata[];
-
-    if(idx >= number)
-        return;
-    //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
-    double2 temp = _double2Dim[idx];
-
-    gipc::THREAD_FENCE();
-
-
-    __blockReduceMax2(temp, sdata, _double2Dim, number);
-}
-
-
-__global__ void _reduct_max_double(double* _double1Dim, int number)
-{
-    int idof = blockIdx.x * blockDim.x;
-    int idx  = threadIdx.x + idof;
-
-    extern __shared__ double tep[];
-
-    if(idx >= number)
-        return;
-    //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
-    double temp = _double1Dim[idx];
-
-    gipc::THREAD_FENCE();
-
-
-    __blockReduceMax(temp, tep, _double1Dim, number);
-}
-
-
 __device__ double __cal_Barrier_energy(const double3* _vertexes,
                                        const double3* _rest_vertexes,
                                        int4           MMCVIDI,
@@ -5636,24 +5598,6 @@ __global__ void _getDeltaEnergy_Reduction(double* squeue, const double3* b, cons
     double temp = __GEIGEN__::__v_vec_dot(b[idx], dx[idx]);
 
     __blockReduceSum(temp, tep, squeue, numbers);
-}
-
-
-__global__ void __add_reduction(double* mem, int numbers)
-{
-    int idof = blockIdx.x * blockDim.x;
-    int idx  = threadIdx.x + idof;
-
-    extern __shared__ double tep[];
-
-    if(idx >= numbers)
-        return;
-    //int cfid = tid + CONFLICT_FREE_OFFSET(tid);
-    double temp = mem[idx];
-
-    gipc::THREAD_FENCE();
-
-    __blockReduceSum(temp, tep, mem, numbers);
 }
 
 

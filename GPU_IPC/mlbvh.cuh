@@ -39,6 +39,7 @@ public:
     double3* _vertexes = nullptr;
     gpuipc::DeviceBuffer<AABB> _bvs;
     gpuipc::DeviceBuffer<AABB> _tempLeafBox;
+    gpuipc::DeviceBuffer<AABB> _reductionLeafBox;
     gpuipc::DeviceBuffer<Node> _nodes;
     gpuipc::DeviceBuffer<uint64_t> _MChash;
     gpuipc::DeviceBuffer<uint32_t> _indices;

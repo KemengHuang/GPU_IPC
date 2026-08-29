@@ -100,21 +100,6 @@ __global__ void PCG_vdv_Reduction(double* squeue, const double3* a, const double
     __PCG_blockReducePartial(temp, tep, squeue, numbers);
 }
 
-// Second-stage reduction: squeue[block] = sum_i squeue[i]
-__global__ void add_reduction(double* mem, int numbers) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    extern __shared__ double tep[];
-
-    if (idx >= numbers) return;
-
-    double temp = mem[idx];
-
-    gipc::THREAD_FENCE();
-
-    __PCG_blockReducePartial(temp, tep, mem, numbers);
-}
-
 // delta0 = sum_i (C*b)_i^T * P_i * (C*b)_i  (energy norm of the filtered RHS)
 __global__ void PCG_add_Reduction_delta0(double* squeue, const __GEIGEN__::Matrix3x3d* P, const double3* b, const __GEIGEN__::Matrix3x3d* constraint, int numbers) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
