@@ -8,14 +8,20 @@
 
 #include "mlbvh.cuh"
 #include <cmath>
+#include <cstdlib>
 #include "cuda_tools.h"
-#include <thrust/sort.h>
-#include <thrust/sequence.h>
-#include <thrust/device_ptr.h>
+#include "cuda_cub_wrappers.h"
 #include<iostream>
 #include<fstream>
 #include "gpu_eigen_libs.cuh"
 #include "device_utils.h"
+
+__global__ void fill_bvh_indices(uint32_t* indices, int number)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i < number)
+        indices[i] = static_cast<uint32_t>(i);
+}
 template <class F>
 __device__ __host__
 inline F __m_min(F a, F b) {
@@ -59,6 +65,12 @@ inline double3 centroid(const AABB& box) noexcept
     c.y = (box.upper.y + box.lower.y) * 0.5;
     c.z = (box.upper.z + box.lower.z) * 0.5;
     return c;
+}
+
+__device__ __host__
+inline double normalized_axis(double offset, double extent) noexcept
+{
+    return extent > 0.0 ? offset / extent : 0.0;
 }
 
 __device__ __host__
@@ -417,8 +429,33 @@ int _dType_EE(const double3& v0, const double3& v1, const double3& v2, const dou
 }
 
 
-__device__ 
-inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, const uint32_t& id1, const uint32_t& id2, const uint32_t& id3, const double& dHat, uint32_t* _cpNum, int* _mInx, int4* _collisionPair, int4* _ccd_collisionPair) noexcept
+template <typename T>
+struct BoundedOutput
+{
+    T*       data;
+    uint32_t capacity;
+
+    struct Reference
+    {
+        T*       data;
+        uint32_t index;
+        uint32_t capacity;
+
+        __device__ void operator=(const T& value) const
+        {
+            if(index < capacity)
+                data[index] = value;
+        }
+    };
+
+    __device__ Reference operator[](uint32_t index) const
+    {
+        return {data, index, capacity};
+    }
+};
+
+__device__
+inline void _checkPTintersection(const double3* _vertexes, int id0, int id1, int id2, int id3, const double& dHat, uint32_t* _cpNum, BoundedOutput<int> _mInx, BoundedOutput<int4> _collisionPair, BoundedOutput<int4> _ccd_collisionPair) noexcept
 {
     double3 v0 = _vertexes[id0];
     double3 v1 = _vertexes[id1];
@@ -520,7 +557,7 @@ inline bool _checkPTintersection(const double3* _vertexes, const uint32_t& id0, 
 }
 
 __device__
-inline bool _checkPTintersection_fullCCD(const double3* _vertexes, const uint32_t& id0, const uint32_t& id1, const uint32_t& id2, const uint32_t& id3, const double& dHat, uint32_t* _cpNum, int4* _ccd_collisionPair) noexcept
+inline void _checkPTintersection_fullCCD(const double3* _vertexes, int id0, int id1, int id2, int id3, const double& dHat, uint32_t* _cpNum, BoundedOutput<int4> _ccd_collisionPair) noexcept
 {
     double3 v0 = _vertexes[id0];
     double3 v1 = _vertexes[id1];
@@ -545,7 +582,7 @@ inline bool _checkPTintersection_fullCCD(const double3* _vertexes, const uint32_
 }
 
 __device__
-inline bool _checkEEintersection(const double3* _vertexes, const double3* _rest_vertexes, const uint32_t& id0, const uint32_t& id1, const uint32_t& id2, const uint32_t& id3, const uint32_t& obj_idx, const double& dHat, uint32_t* _cpNum, int* MatIndex, int4* _collisionPair, int4* _ccd_collisionPair, int edgeNum) noexcept
+inline void _checkEEintersection(const double3* _vertexes, const double3* _rest_vertexes, int id0, int id1, int id2, int id3, int obj_idx, const double& dHat, uint32_t* _cpNum, BoundedOutput<int> MatIndex, BoundedOutput<int4> _collisionPair, BoundedOutput<int4> _ccd_collisionPair, int edgeNum) noexcept
 {
     double3 v0 = _vertexes[id0];
     double3 v1 = _vertexes[id1];
@@ -849,7 +886,6 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
     //printf("%f   %f    %f\n", xmax, ymax, zmax);
     int warpTid = threadIdx.x % 32;
     int warpId = (threadIdx.x >> 5);
-    double nextTp;
     int warpNum;
     int tidNum = 32;
     if (blockIdx.x == gridDim.x - 1) {
@@ -861,10 +897,22 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
     else {
         warpNum = ((blockDim.x) >> 5);
     }
+    const unsigned int warp_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(tidNum));
     for (int i = 1; i < tidNum; i = (i << 1)) {
-        temp.combines(gipc::WARP_SHFL_DOWN(xmin, i), gipc::WARP_SHFL_DOWN(ymin, i), gipc::WARP_SHFL_DOWN(zmin, i),
-            gipc::WARP_SHFL_DOWN(xmax, i), gipc::WARP_SHFL_DOWN(ymax, i), gipc::WARP_SHFL_DOWN(zmax, i));
+        const double other_xmin = gipc::WARP_SHFL_DOWN(xmin, i, warp_mask);
+        const double other_ymin = gipc::WARP_SHFL_DOWN(ymin, i, warp_mask);
+        const double other_zmin = gipc::WARP_SHFL_DOWN(zmin, i, warp_mask);
+        const double other_xmax = gipc::WARP_SHFL_DOWN(xmax, i, warp_mask);
+        const double other_ymax = gipc::WARP_SHFL_DOWN(ymax, i, warp_mask);
+        const double other_zmax = gipc::WARP_SHFL_DOWN(zmax, i, warp_mask);
         if (warpTid + i < tidNum) {
+            temp.combines(other_xmin,
+                          other_ymin,
+                          other_zmin,
+                          other_xmax,
+                          other_ymax,
+                          other_zmax);
             xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
             xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
         }
@@ -880,10 +928,22 @@ void _reduct_max_box(AABB* _leafBoxes, int number) {
         xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
         xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
         //	warpNum = ((tidNum + 31) >> 5);
+        const unsigned int aggregate_mask =
+            gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(warpNum));
         for (int i = 1; i < warpNum; i = (i << 1)) {
-            temp.combines(gipc::WARP_SHFL_DOWN(xmin, i), gipc::WARP_SHFL_DOWN(ymin, i), gipc::WARP_SHFL_DOWN(zmin, i),
-                gipc::WARP_SHFL_DOWN(xmax, i), gipc::WARP_SHFL_DOWN(ymax, i), gipc::WARP_SHFL_DOWN(zmax, i));
+            const double other_xmin = gipc::WARP_SHFL_DOWN(xmin, i, aggregate_mask);
+            const double other_ymin = gipc::WARP_SHFL_DOWN(ymin, i, aggregate_mask);
+            const double other_zmin = gipc::WARP_SHFL_DOWN(zmin, i, aggregate_mask);
+            const double other_xmax = gipc::WARP_SHFL_DOWN(xmax, i, aggregate_mask);
+            const double other_ymax = gipc::WARP_SHFL_DOWN(ymax, i, aggregate_mask);
+            const double other_zmax = gipc::WARP_SHFL_DOWN(zmax, i, aggregate_mask);
             if (threadIdx.x + i < warpNum) {
+                temp.combines(other_xmin,
+                              other_ymin,
+                              other_zmin,
+                              other_xmax,
+                              other_ymax,
+                              other_zmax);
                 xmin = temp.lower.x, ymin = temp.lower.y, zmin = temp.lower.z;
                 xmax = temp.upper.x, ymax = temp.upper.y, zmax = temp.upper.z;
             }
@@ -950,7 +1010,9 @@ void _calcMChash(uint64_t* _MChash, AABB* _bvs, int number) {
     double3 offset = make_double3(centerP.x - maxBv.lower.x, centerP.y - maxBv.lower.y, centerP.z - maxBv.lower.z);
     
     //printf("%d   %f     %f     %f\n", offset.x, offset.y, offset.z);
-    uint64_t mc32 = morton_code(offset.x / SceneSize.x, offset.y / SceneSize.y, offset.z / SceneSize.z);
+    uint64_t mc32 = morton_code(normalized_axis(offset.x, SceneSize.x),
+                                normalized_axis(offset.y, SceneSize.y),
+                                normalized_axis(offset.z, SceneSize.z));
     uint64_t mc64 = ((mc32 << 32) | idx);
     _MChash[idx] = mc64;
 }
@@ -1033,11 +1095,15 @@ void _sortBvs(const uint32_t* _indices, AABB* _bvs, AABB* _temp_bvs, int number)
 }
 
 __global__
-void _selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _collisionPair, int4* _ccd_collisionPair, uint32_t* _cpNum, int* MatIndex, double dHat, int number) {
+void _selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _collisionPair, int4* _ccd_collisionPair, uint32_t* _cpNum, int* MatIndex, double dHat, uint32_t pair_capacity, int number) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= number) return;
 
-    uint32_t  stack[64];
+    const BoundedOutput<int4> collision_pairs{_collisionPair, pair_capacity};
+    const BoundedOutput<int4> ccd_collision_pairs{_ccd_collisionPair, pair_capacity};
+    const BoundedOutput<int>  matrix_indices{MatIndex, pair_capacity};
+
+    uint32_t  stack[65];  // A unique 64-bit Morton key bounds LBVH depth by 64.
     uint32_t* stack_ptr = stack;
     *stack_ptr++ = 0;
       
@@ -1048,8 +1114,30 @@ void _selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _fa
     //double bboxDiagSize2 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(_bvs[0].upper, _bvs[0].lower));
     //printf("%f\n", bboxDiagSize2);
     double gapl = sqrt(dHat);//0.001 * sqrt(bboxDiagSize2);
+    const auto root_object = _nodes[0].element_idx;
+    if(root_object != 0xFFFFFFFF)
+    {
+        if(overlap(_bv, _bvs[0], gapl)
+           && idx != _faces[root_object].x && idx != _faces[root_object].y
+           && idx != _faces[root_object].z
+           && !(_btype[idx] >= 2 && _btype[_faces[root_object].x] >= 2
+                && _btype[_faces[root_object].y] >= 2
+                && _btype[_faces[root_object].z] >= 2))
+        {
+            _checkPTintersection(_vertexes,
+                                 idx,
+                                 _faces[root_object].x,
+                                 _faces[root_object].y,
+                                 _faces[root_object].z,
+                                 dHat,
+                                 _cpNum,
+                                 matrix_indices,
+                                 collision_pairs,
+                                 ccd_collision_pairs);
+        }
+        return;
+    }
     //double dHat = gapl * gapl;// *bboxDiagSize2;
-    unsigned int num_found = 0;
     do
     {
         const uint32_t node_id = *--stack_ptr;
@@ -1063,7 +1151,7 @@ void _selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _fa
             {
                 if (idx != _faces[obj_idx].x && idx != _faces[obj_idx].y && idx != _faces[obj_idx].z) {
                     if (!(_btype[idx] >= 2 && _btype[_faces[obj_idx].x] >= 2 && _btype[_faces[obj_idx].y] >= 2 && _btype[_faces[obj_idx].z] >= 2))
-                        _checkPTintersection(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, MatIndex, _collisionPair, _ccd_collisionPair);
+                        _checkPTintersection(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, matrix_indices, collision_pairs, ccd_collision_pairs);
                 }
             }
             else // the node is not a leaf.
@@ -1078,7 +1166,7 @@ void _selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _fa
             {
                 if (idx != _faces[obj_idx].x && idx != _faces[obj_idx].y && idx != _faces[obj_idx].z) {
                     if (!(_btype[idx] >= 2 && _btype[_faces[obj_idx].x] >= 2 && _btype[_faces[obj_idx].y] >= 2 && _btype[_faces[obj_idx].z] >= 2))
-                        _checkPTintersection(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, MatIndex, _collisionPair, _ccd_collisionPair);
+                        _checkPTintersection(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, matrix_indices, collision_pairs, ccd_collision_pairs);
                 }
             }
             else // the node is not a leaf.
@@ -1090,11 +1178,13 @@ void _selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _fa
 } 
 
 __global__
-void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double3* moveDir, double alpha, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisionPair, uint32_t* _cpNum, double dHat, int number) {
+void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double3* moveDir, double alpha, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisionPair, uint32_t* _cpNum, double dHat, uint32_t pair_capacity, int number) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= number) return;
 
-    uint32_t  stack[64];
+    const BoundedOutput<int4> ccd_collision_pairs{_ccd_collisionPair, pair_capacity};
+
+    uint32_t  stack[65];
     uint32_t* stack_ptr = stack;
     *stack_ptr++ = 0;
 
@@ -1108,8 +1198,25 @@ void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double
     //double bboxDiagSize2 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(_bvs[0].upper, _bvs[0].lower));
     //printf("%f\n", bboxDiagSize2);
     double gapl = sqrt(dHat);//0.001 * sqrt(bboxDiagSize2);
+    const auto root_object = _nodes[0].element_idx;
+    if(root_object != 0xFFFFFFFF)
+    {
+        if(overlap(_bv, _bvs[0], gapl)
+           && idx != _faces[root_object].x && idx != _faces[root_object].y
+           && idx != _faces[root_object].z
+           && !(_btype[idx] >= 2 && _btype[_faces[root_object].x] >= 2
+                && _btype[_faces[root_object].y] >= 2
+                && _btype[_faces[root_object].z] >= 2))
+        {
+            ccd_collision_pairs[gipc::ATOMIC_ADD(_cpNum, 1)] =
+                make_int4(-idx - 1,
+                          _faces[root_object].x,
+                          _faces[root_object].y,
+                          _faces[root_object].z);
+        }
+        return;
+    }
     //double dHat = gapl * gapl;// *bboxDiagSize2;
-    unsigned int num_found = 0;
     do
     {
         const uint32_t node_id = *--stack_ptr;
@@ -1123,7 +1230,7 @@ void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double
             {
                 if(!(_btype[idx]>=2&& _btype[_faces[obj_idx].x] >= 2 && _btype[_faces[obj_idx].y] >= 2 && _btype[_faces[obj_idx].z] >= 2))
                     if (idx != _faces[obj_idx].x && idx != _faces[obj_idx].y && idx != _faces[obj_idx].z) {
-                        _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
+                        ccd_collision_pairs[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
                         //_checkPTintersection_fullCCD(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, _ccd_collisionPair);
                     }
             }
@@ -1139,7 +1246,7 @@ void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double
             {
                 if(!(_btype[idx]>=2&& _btype[_faces[obj_idx].x] >= 2 && _btype[_faces[obj_idx].y] >= 2 && _btype[_faces[obj_idx].z] >= 2))
                     if (idx != _faces[obj_idx].x && idx != _faces[obj_idx].y && idx != _faces[obj_idx].z) {
-                        _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
+                        ccd_collision_pairs[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(-idx - 1, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z);
                         //_checkPTintersection_fullCCD(_vertexes, idx, _faces[obj_idx].x, _faces[obj_idx].y, _faces[obj_idx].z, dHat, _cpNum, _ccd_collisionPair);
                     }
             }
@@ -1153,11 +1260,15 @@ void _selfQuery_vf_ccd(const int* _btype, const double3* _vertexes, const double
 
 
 __global__
-void _selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _rest_vertexes, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _collisionPair, int4* _ccd_collisionPair, uint32_t* _cpNum, int* MatIndex, double dHat, int number) {
+void _selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _rest_vertexes, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _collisionPair, int4* _ccd_collisionPair, uint32_t* _cpNum, int* MatIndex, double dHat, uint32_t pair_capacity, int number) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= number) return;
 
-    uint32_t  stack[64];
+    const BoundedOutput<int4> collision_pairs{_collisionPair, pair_capacity};
+    const BoundedOutput<int4> ccd_collision_pairs{_ccd_collisionPair, pair_capacity};
+    const BoundedOutput<int>  matrix_indices{MatIndex, pair_capacity};
+
+    uint32_t  stack[65];
     uint32_t* stack_ptr = stack;
     *stack_ptr++ = 0;
 
@@ -1168,7 +1279,6 @@ void _selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _
     //printf("%f\n", bboxDiagSize2);
     double gapl = sqrt(dHat);//0.001 * sqrt(bboxDiagSize2);
     //double dHat = gapl * gapl;// *bboxDiagSize2;
-    unsigned int num_found = 0;
     do
     {
         const uint32_t node_id = *--stack_ptr;
@@ -1184,7 +1294,7 @@ void _selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _
                     if (!(_edges[self_eid].x == _edges[obj_idx].x || _edges[self_eid].x == _edges[obj_idx].y || _edges[self_eid].y == _edges[obj_idx].x || _edges[self_eid].y == _edges[obj_idx].y || obj_idx < self_eid)) {
                         //printf("%d   %d   %d   %d\n", _edges[self_eid].x, _edges[self_eid].y, _edges[obj_idx].x, _edges[obj_idx].y);
                         if (!(_btype[_edges[self_eid].x] >= 2 && _btype[_edges[self_eid].y]>= 2 && _btype[_edges[obj_idx].x] >= 2 && _btype[_edges[obj_idx].y] >= 2))
-                            _checkEEintersection(_vertexes, _rest_vertexes, _edges[self_eid].x, _edges[self_eid].y, _edges[obj_idx].x, _edges[obj_idx].y, obj_idx, dHat, _cpNum, MatIndex, _collisionPair, _ccd_collisionPair, number);
+                            _checkEEintersection(_vertexes, _rest_vertexes, _edges[self_eid].x, _edges[self_eid].y, _edges[obj_idx].x, _edges[obj_idx].y, obj_idx, dHat, _cpNum, matrix_indices, collision_pairs, ccd_collision_pairs, number);
                     }
                 }
             }
@@ -1202,7 +1312,7 @@ void _selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _
                     if (!(_edges[self_eid].x == _edges[obj_idx].x || _edges[self_eid].x == _edges[obj_idx].y || _edges[self_eid].y == _edges[obj_idx].x || _edges[self_eid].y == _edges[obj_idx].y || obj_idx < self_eid)) {
                         //printf("%d   %d   %d   %d\n", _edges[self_eid].x, _edges[self_eid].y, _edges[obj_idx].x, _edges[obj_idx].y);
                         if (!(_btype[_edges[self_eid].x] >= 2 && _btype[_edges[self_eid].y]>= 2 && _btype[_edges[obj_idx].x] >= 2 && _btype[_edges[obj_idx].y] >= 2))
-                            _checkEEintersection(_vertexes, _rest_vertexes, _edges[self_eid].x, _edges[self_eid].y, _edges[obj_idx].x, _edges[obj_idx].y, obj_idx, dHat, _cpNum, MatIndex, _collisionPair, _ccd_collisionPair, number);
+                            _checkEEintersection(_vertexes, _rest_vertexes, _edges[self_eid].x, _edges[self_eid].y, _edges[obj_idx].x, _edges[obj_idx].y, obj_idx, dHat, _cpNum, matrix_indices, collision_pairs, ccd_collision_pairs, number);
                     }
                 }
             }
@@ -1215,11 +1325,13 @@ void _selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _
 }
 
 __global__
-void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double3* moveDir, double alpha, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisionPair, uint32_t* _cpNum, double dHat, int number) {
+void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double3* moveDir, double alpha, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisionPair, uint32_t* _cpNum, double dHat, uint32_t pair_capacity, int number) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= number) return;
 
-    uint32_t  stack[64];
+    const BoundedOutput<int4> ccd_collision_pairs{_ccd_collisionPair, pair_capacity};
+
+    uint32_t  stack[65];
     uint32_t* stack_ptr = stack;
     *stack_ptr++ = 0;
     idx = idx + number - 1;
@@ -1232,7 +1344,6 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
     //_bv.combines(edge_tvert1.x, edge_tvert1.y, edge_tvert1.z);
     double gapl = sqrt(dHat);
 
-    unsigned int num_found = 0;
     do
     {
         const uint32_t node_id = *--stack_ptr;
@@ -1247,7 +1358,7 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
                 if (self_eid != obj_idx) {
                     if (!(_btype[_edges[self_eid].x] >= 2 && _btype[_edges[self_eid].y] >= 2 && _btype[_edges[obj_idx].x] >= 2 && _btype[_edges[obj_idx].y] >= 2))
                         if (!(current_edge.x == _edges[obj_idx].x || current_edge.x == _edges[obj_idx].y || current_edge.y == _edges[obj_idx].x || current_edge.y == _edges[obj_idx].y || obj_idx < self_eid)) {
-                            _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
+                            ccd_collision_pairs[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
                         }
                 }
             }
@@ -1264,7 +1375,7 @@ void _selfQuery_ee_ccd(const int* _btype, const double3* _vertexes, const double
                 if (self_eid != obj_idx) {
                     if (!(_btype[_edges[self_eid].x] >= 2 && _btype[_edges[self_eid].y] >= 2 && _btype[_edges[obj_idx].x] >= 2 && _btype[_edges[obj_idx].y] >= 2))
                         if (!(current_edge.x == _edges[obj_idx].x || current_edge.x == _edges[obj_idx].y || current_edge.y == _edges[obj_idx].x || current_edge.y == _edges[obj_idx].y || obj_idx < self_eid)) {
-                            _ccd_collisionPair[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
+                            ccd_collision_pairs[gipc::ATOMIC_ADD(_cpNum, 1)] = make_int4(current_edge.x, current_edge.y, _edges[obj_idx].x, _edges[obj_idx].y);
                         }
                 }
             }
@@ -1304,9 +1415,11 @@ AABB calcMaxBV(AABB* _leafBoxes, AABB* _tempLeafBox, const int& number) {
         blockNum = (numbers + threadNum - 1) / threadNum;
 
     }
-    cudaMemcpy(_leafBoxes, _tempLeafBox, sizeof(AABB), cudaMemcpyDeviceToDevice);
+    CUDA_SAFE_CALL(
+        cudaMemcpy(_leafBoxes, _tempLeafBox, sizeof(AABB), cudaMemcpyDeviceToDevice));
     AABB h_bv;
-    cudaMemcpy(&h_bv, _tempLeafBox, sizeof(AABB), cudaMemcpyDeviceToHost);
+    CUDA_SAFE_CALL(
+        cudaMemcpy(&h_bv, _tempLeafBox, sizeof(AABB), cudaMemcpyDeviceToHost));
     //CUDA_SAFE_CALL(cudaFree(_tempLeafBox));
     return h_bv;
 }
@@ -1351,7 +1464,7 @@ void calcLeafNodes(Node* _nodes, const uint32_t* _indices, int number) {
 
 void calcInternalNodes(Node* _nodes, const uint64_t* _MChash, int number) {
     int numbers = number;
-    if(numbers < 1)
+    if(numbers <= 1)
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
@@ -1360,7 +1473,7 @@ void calcInternalNodes(Node* _nodes, const uint64_t* _MChash, int number) {
 
 void calcInternalAABB(const Node* _nodes, AABB* _bvs, uint32_t* flags, int number) {
     int numbers = number;
-    if(numbers < 1)
+    if(numbers <= 1)
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
@@ -1380,70 +1493,95 @@ void sortBvs(const uint32_t* _indices, AABB* _bvs, AABB* _temp_bvs, int number) 
     int blockNum = (numbers + threadNum - 1) / threadNum;
     //AABB* _temp_bvs = _tempLeafBox;
    // CUDA_SAFE_CALL(cudaMalloc((void**)&_temp_bvs, (number) * sizeof(AABB)));
-    cudaMemcpy(_temp_bvs, _bvs + number - 1, sizeof(AABB) * number, cudaMemcpyDeviceToDevice);
+    CUDA_SAFE_CALL(cudaMemcpy(_temp_bvs,
+                              _bvs + number - 1,
+                              sizeof(AABB) * static_cast<size_t>(number),
+                              cudaMemcpyDeviceToDevice));
     _sortBvs << <blockNum, threadNum >> > (_indices, _bvs + number - 1, _temp_bvs, number);
     //CUDA_SAFE_CALL(cudaFree(_temp_bvs));
 }
 
 
-void selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _rest_vertexes, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, int number) {
+void selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _rest_vertexes, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, uint32_t pair_capacity, int number) {
     int numbers = number;
     if(numbers < 1)
         return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     
-    _selfQuery_ee << <blockNum, threadNum >> > (_btype, _vertexes, _rest_vertexes, _edges, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, numbers);
+    _selfQuery_ee << <blockNum, threadNum >> > (_btype, _vertexes, _rest_vertexes, _edges, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, pair_capacity, numbers);
 }
 
-void fullCCDselfQuery_ee(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, int number) {
+void fullCCDselfQuery_ee(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, uint32_t pair_capacity, int number) {
     int numbers = number;
     if(numbers < 1)
         return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
-    _selfQuery_ee_ccd << <blockNum, threadNum >> > (_btype, _vertexes, moveDir, alpha, _edges, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, numbers);
+    _selfQuery_ee_ccd << <blockNum, threadNum >> > (_btype, _vertexes, moveDir, alpha, _edges, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, pair_capacity, numbers);
 }
 
-void selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, int number) {
+void selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, uint32_t pair_capacity, int number) {
     int numbers = number;
     if(numbers < 1)
         return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
-    _selfQuery_vf << <blockNum, threadNum >> > (_btype, _vertexes, _faces, _surfVerts, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, numbers);
+    _selfQuery_vf << <blockNum, threadNum >> > (_btype, _vertexes, _faces, _surfVerts, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, pair_capacity, numbers);
 }
 
-void fullCCDselfQuery_vf(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, int number) {
+void fullCCDselfQuery_vf(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, uint32_t pair_capacity, int number) {
     int numbers = number;
     if(numbers < 1)
         return;
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
-    _selfQuery_vf_ccd << <blockNum, threadNum >> > (_btype, _vertexes, moveDir, alpha, _faces, _surfVerts, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, numbers);
+    _selfQuery_vf_ccd << <blockNum, threadNum >> > (_btype, _vertexes, moveDir, alpha, _faces, _surfVerts, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, pair_capacity, numbers);
 }
 
 void lbvh::FREE_DEVICE_MEM() {
-    CUDA_SAFE_CALL(cudaFree(_indices));
-    CUDA_SAFE_CALL(cudaFree(_MChash));
-    CUDA_SAFE_CALL(cudaFree(_nodes));
-    CUDA_SAFE_CALL(cudaFree(_bvs));
-    CUDA_SAFE_CALL(cudaFree(_flags));
-    CUDA_SAFE_CALL(cudaFree(_tempLeafBox));
+    _indices.release();
+    _MChash.release();
+    _sort_indices.release();
+    _sort_morton_codes.release();
+    _nodes.release();
+    _bvs.release();
+    _flags.release();
+    _tempLeafBox.release();
 }
 
 void lbvh::MALLOC_DEVICE_MEM(const int& number) {
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_indices, (number) * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_MChash, (number) * sizeof(uint64_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_nodes, (2 * number - 1) * sizeof(Node)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_bvs, (2 * number - 1) * sizeof(AABB)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_tempLeafBox, number * sizeof(AABB)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_flags, (number - 1) * sizeof(uint32_t)));
-    //CUDA_SAFE_CALL(cudaMalloc((void**)&_cpNum, sizeof(uint32_t)));ye
-    //CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, sizeof(uint32_t)));
+    if(number <= 0)
+    {
+        FREE_DEVICE_MEM();
+        return;
+    }
+    _indices.resize(number);
+    _MChash.resize(number);
+    _nodes.resize(2 * static_cast<size_t>(number) - 1);
+    _bvs.resize(2 * static_cast<size_t>(number) - 1);
+    _tempLeafBox.resize(number);
+    _flags.resize(number > 1 ? static_cast<size_t>(number - 1) : 0);
+}
+
+void lbvh::sort_morton_codes(int number)
+{
+    if(number <= 0)
+        return;
+    _sort_morton_codes.resize_discard(number);
+    _sort_indices.resize_discard(number);
+    fill_bvh_indices<<<(number + 255) / 256, 256>>>(_indices.data(), number);
+    GPUIPC_CHECK_CUDA(cudaGetLastError());
+    gpuipc::DeviceRadixSort().sort_pairs(_MChash.data(),
+                                         _sort_morton_codes.data(),
+                                         _indices.data(),
+                                         _sort_indices.data(),
+                                         number);
+    std::swap(_MChash, _sort_morton_codes);
+    std::swap(_indices, _sort_indices);
 }
 
 lbvh::~lbvh() {
@@ -1452,28 +1590,20 @@ lbvh::~lbvh() {
 
 
 
-void lbvh_f::init(int* _mbtype, double3* _mVerts, uint3* _mFaces, uint32_t* _mSurfVert, int4* _mCollisonPairs, int4* _ccd_mCollisonPairs, uint32_t* _mcpNum, int* _mMatIndex, const int& faceNum, const int& vertNum) {
+void lbvh_f::init(int* _mbtype, double3* _mVerts, uint3* _mFaces, uint32_t* _mSurfVert, const int& faceNum, const int& vertNum) {
     _faces = _mFaces;
     _surfVerts = _mSurfVert;
     _vertexes = _mVerts;
-    _collisionPair = _mCollisonPairs;
-    _ccd_collisionPair = _ccd_mCollisonPairs;
-    _cpNum = _mcpNum;
-    _MatIndex = _mMatIndex;
     face_number = faceNum;
     vert_number = vertNum;
     _btype = _mbtype;
     MALLOC_DEVICE_MEM(face_number);
 }
 
-void lbvh_e::init(int* _mbtype, double3* _mVerts, double3* _mRest_vertexes, uint2* _mEdges, int4* _mCollisonPairs, int4* _ccd_mCollisonPairs, uint32_t* _mcpNum, int* _mMatIndex, const int& edgeNum, const int& vertNum) {
+void lbvh_e::init(int* _mbtype, double3* _mVerts, double3* _mRest_vertexes, uint2* _mEdges, const int& edgeNum, const int& vertNum) {
     _rest_vertexes = _mRest_vertexes;
     _edges = _mEdges;
     _vertexes = _mVerts;
-    _cpNum = _mcpNum;
-    _collisionPair = _mCollisonPairs;
-    _ccd_collisionPair = _ccd_mCollisonPairs;
-    _MatIndex = _mMatIndex;
     edge_number = edgeNum;
     vert_number = vertNum;
     _btype = _mbtype;
@@ -1481,6 +1611,12 @@ void lbvh_e::init(int* _mbtype, double3* _mVerts, double3* _mRest_vertexes, uint
 }
 
 AABB* lbvh_f::getSceneSize() {
+    if(face_number == 0)
+    {
+        std::cerr << "A collision scene requires at least one surface face."
+                  << std::endl;
+        std::abort();
+    }
     calcLeafBvs(_vertexes, _faces, _bvs, face_number, 0);
 
     calcMaxBV(_bvs, _tempLeafBox, face_number);
@@ -1488,12 +1624,16 @@ AABB* lbvh_f::getSceneSize() {
 }
 
 double lbvh_f::Construct() {
+    if(face_number == 0)
+    {
+        std::cerr << "Cannot construct an empty face BVH." << std::endl;
+        std::abort();
+    }
     calcLeafBvs(_vertexes, _faces, _bvs, face_number, 0);
     //CUDA_SAFE_CALL(cudaDeviceSynchronize());
     scene = calcMaxBV(_bvs, _tempLeafBox, face_number);
     calcMChash(_MChash, _bvs, face_number);
-    thrust::sequence(thrust::device_ptr<uint32_t>(_indices), thrust::device_ptr<uint32_t>(_indices) + face_number);
-    thrust::sort_by_key(thrust::device_ptr<uint64_t>(_MChash), thrust::device_ptr<uint64_t>(_MChash) + face_number, thrust::device_ptr<uint32_t>(_indices));
+    sort_morton_codes(face_number);
     sortBvs(_indices, _bvs, _tempLeafBox, face_number);
     calcLeafNodes(_nodes, _indices, face_number);
     calcInternalNodes(_nodes, _MChash, face_number);
@@ -1503,12 +1643,15 @@ double lbvh_f::Construct() {
 }
 
 double lbvh_f::ConstructFullCCD(const double3* moveDir, const double& alpha) {
+    if(face_number == 0)
+    {
+        std::cerr << "Cannot construct an empty face BVH." << std::endl;
+        std::abort();
+    }
     calcLeafBvs_fullCCD(_vertexes, moveDir, alpha, _faces, _bvs, face_number, 0);
     scene = calcMaxBV(_bvs, _tempLeafBox, face_number);
     calcMChash(_MChash, _bvs, face_number);
-    thrust::sequence(thrust::device_ptr<uint32_t>(_indices), thrust::device_ptr<uint32_t>(_indices) + face_number);
-
-    thrust::sort_by_key(thrust::device_ptr<uint64_t>(_MChash), thrust::device_ptr<uint64_t>(_MChash) + face_number, thrust::device_ptr<uint32_t>(_indices));
+    sort_morton_codes(face_number);
     sortBvs(_indices, _bvs, _tempLeafBox, face_number);
 
     calcLeafNodes(_nodes, _indices, face_number);
@@ -1521,6 +1664,9 @@ double lbvh_f::ConstructFullCCD(const double3* moveDir, const double& alpha) {
 
 double lbvh_e::Construct() {
 
+    if(edge_number == 0)
+        return 0;
+
     /*cudaEvent_t start, end0, end1, end2;
     cudaEventCreate(&start);
     cudaEventCreate(&end0);
@@ -1531,10 +1677,9 @@ double lbvh_e::Construct() {
     calcLeafBvs(_vertexes, _edges, _bvs, edge_number, 1);
     scene = calcMaxBV(_bvs, _tempLeafBox, edge_number);
     calcMChash(_MChash, _bvs, edge_number);
-    thrust::sequence(thrust::device_ptr<uint32_t>(_indices), thrust::device_ptr<uint32_t>(_indices) + edge_number);
+    sort_morton_codes(edge_number);
     //cudaEventRecord(end0);
 
-    thrust::sort_by_key(thrust::device_ptr<uint64_t>(_MChash), thrust::device_ptr<uint64_t>(_MChash) + edge_number, thrust::device_ptr<uint32_t>(_indices));
     sortBvs(_indices, _bvs, _tempLeafBox, edge_number);
 
     //cudaEventRecord(end1);
@@ -1561,12 +1706,12 @@ double lbvh_e::Construct() {
 }
 
 double lbvh_e::ConstructFullCCD(const double3* moveDir, const double& alpha) {
+    if(edge_number == 0)
+        return 0;
     calcLeafBvs_fullCCD(_vertexes, moveDir, alpha, _edges, _bvs, edge_number, 1);
     scene = calcMaxBV(_bvs, _tempLeafBox, edge_number);
     calcMChash(_MChash, _bvs, edge_number);
-    thrust::sequence(thrust::device_ptr<uint32_t>(_indices), thrust::device_ptr<uint32_t>(_indices) + edge_number);
-
-    thrust::sort_by_key(thrust::device_ptr<uint64_t>(_MChash), thrust::device_ptr<uint64_t>(_MChash) + edge_number, thrust::device_ptr<uint32_t>(_indices));
+    sort_morton_codes(edge_number);
     sortBvs(_indices, _bvs, _tempLeafBox, edge_number);
 
     calcLeafNodes(_nodes, _indices, edge_number);
@@ -1579,27 +1724,39 @@ double lbvh_e::ConstructFullCCD(const double3* moveDir, const double& alpha) {
 }
 
 
-void lbvh_f::SelfCollitionDetect(double dHat) {
+void lbvh_f::SelfCollitionDetect(double dHat, int4* collisionPairs, int4* ccdCollisionPairs, uint32_t* pairCounts, int* matrixIndices, uint32_t pairCapacity) {
 
-    selfQuery_vf(_btype, _vertexes, _faces, _surfVerts, _bvs, _nodes, _collisionPair, _ccd_collisionPair, _cpNum, _MatIndex, dHat, vert_number);
+    if(face_number == 0 || vert_number == 0)
+        return;
 
-}
-
-void lbvh_e::SelfCollitionDetect(double dHat) {
-
-    selfQuery_ee(_btype, _vertexes, _rest_vertexes, _edges, _bvs, _nodes, _collisionPair, _ccd_collisionPair, _cpNum, _MatIndex, dHat, edge_number);
+    selfQuery_vf(_btype, _vertexes, _faces, _surfVerts, _bvs, _nodes, collisionPairs, ccdCollisionPairs, pairCounts, matrixIndices, dHat, pairCapacity, vert_number);
 
 }
 
-void lbvh_f::SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha) {
+void lbvh_e::SelfCollitionDetect(double dHat, int4* collisionPairs, int4* ccdCollisionPairs, uint32_t* pairCounts, int* matrixIndices, uint32_t pairCapacity) {
 
-    fullCCDselfQuery_vf(_btype, _vertexes, moveDir, alpha, _faces, _surfVerts, _bvs, _nodes, _ccd_collisionPair, _cpNum, dHat, vert_number);
+    if(edge_number <= 1)
+        return;
+
+    selfQuery_ee(_btype, _vertexes, _rest_vertexes, _edges, _bvs, _nodes, collisionPairs, ccdCollisionPairs, pairCounts, matrixIndices, dHat, pairCapacity, edge_number);
 
 }
 
-void lbvh_e::SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha) {
+void lbvh_f::SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha, int4* ccdCollisionPairs, uint32_t* pairCount, uint32_t pairCapacity) {
 
-    fullCCDselfQuery_ee(_btype, _vertexes, moveDir, alpha, _edges, _bvs, _nodes, _ccd_collisionPair, _cpNum, dHat, edge_number);
+    if(face_number == 0 || vert_number == 0)
+        return;
+
+    fullCCDselfQuery_vf(_btype, _vertexes, moveDir, alpha, _faces, _surfVerts, _bvs, _nodes, ccdCollisionPairs, pairCount, dHat, pairCapacity, vert_number);
+
+}
+
+void lbvh_e::SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha, int4* ccdCollisionPairs, uint32_t* pairCount, uint32_t pairCapacity) {
+
+    if(edge_number <= 1)
+        return;
+
+    fullCCDselfQuery_ee(_btype, _vertexes, moveDir, alpha, _edges, _bvs, _nodes, ccdCollisionPairs, pairCount, dHat, pairCapacity, edge_number);
 
 }
 

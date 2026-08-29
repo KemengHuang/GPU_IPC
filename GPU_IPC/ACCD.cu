@@ -585,8 +585,6 @@ inline __device__ double IntersectVF(double3 ta0, double3 tb0, double3 tc0,
     //    return 1.0;
 
     double roots[3];
-    double coeffs[4];
-    coeffs[3] = a, coeffs[2] = b, coeffs[1] = c, coeffs[0] = d;
     int num;// = solveCubic(coeffs, roots, errorRate);
 
     __GEIGEN__::__NewtonSolverForCubicEquation(a, b, c, d, roots, num, errorRate);

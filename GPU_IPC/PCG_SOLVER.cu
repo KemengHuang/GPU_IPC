@@ -23,7 +23,13 @@
 #include "device_launch_parameters.h"
 #include "gpu_eigen_libs.cuh"
 #include "cuda_tools.h"
+#include "cuda_cub_wrappers.h"
 #include "device_utils.h"
+
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <limits>
 
 // =============================================================================
 // 1. Block-reduction device helper
@@ -46,8 +52,14 @@ __device__ __forceinline__ void __PCG_blockReducePartial(double temp, double* te
     else {
         warpNum = ((blockDim.x) >> 5);
     }
+    const int warp_begin = idof + warpId * warpSize;
+    const int valid_lanes = min(warpSize, max(numbers - warp_begin, 0));
+    const unsigned int warp_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     for (int i = 1; i < 32; i = (i << 1)) {
-        temp += gipc::WARP_SHFL_DOWN(temp, i);
+        const double other = gipc::WARP_SHFL_DOWN(temp, i, warp_mask);
+        if(warpTid + i < valid_lanes)
+            temp += other;
     }
     if (warpTid == 0) {
         tep[warpId] = temp;
@@ -56,8 +68,13 @@ __device__ __forceinline__ void __PCG_blockReducePartial(double temp, double* te
     if (threadIdx.x < warpNum) {
         if (warpNum > 1) {
             temp = tep[threadIdx.x];
+            const unsigned int aggregate_mask =
+                gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(warpNum));
             for (int i = 1; i < warpNum; i = (i << 1)) {
-                temp += gipc::WARP_SHFL_DOWN(temp, i);
+                const double other =
+                    gipc::WARP_SHFL_DOWN(temp, i, aggregate_mask);
+                if(threadIdx.x + i < warpNum)
+                    temp += other;
             }
         }
         if (threadIdx.x == 0) {
@@ -234,123 +251,79 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
     if (blockIdx.x < offset4) {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx >= numbers4) return;
-        __shared__ int offset;
         int Hid = idx / 144;
         int MRid = (idx % 144) / 12;
         int MCid = (idx % 144) % 12;
 
         int vId = MCid / 3;
         int axisId = MCid % 3;
-        int GRtid = idx % 12;
-
         double rdata = Hessians12[Hid].m[MRid][MCid] * (*(&(c[*(&(D4Index[Hid].x) + vId)].x) + axisId));
 
-        if (threadIdx.x == 0) {
-            offset = (12 - GRtid);
-        }
-        gipc::SYNC_THREADS();
-
-        int BRid = (threadIdx.x - offset + 12) / 12;
-        int landidx = (threadIdx.x - offset) % 12;
-        if (BRid == 0) {
-            landidx = threadIdx.x;
-        }
-
-        int warpId = threadIdx.x & 0x1f;
-        bool bBoundary = (landidx == 0) || (warpId == 0);
-
-        unsigned int mark = gipc::WARP_BALLOT(bBoundary);
-        mark = __brev(mark);
-        unsigned int interval = std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
-
+        const int lane = threadIdx.x & 0x1f;
+        const int valid_lanes = min(32, numbers4 - (idx - lane));
+        const unsigned int active_mask =
+            gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
+        const unsigned int row_mask = __match_any_sync(active_mask, Hid * 12 + MRid);
         for (int iter = 1; iter < 12; iter <<= 1) {
-            double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
-            if (interval >= iter) rdata += tmp;
+            const double tmp = gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
+            const int source_lane = lane + iter;
+            if(source_lane < 32 && (row_mask & (1U << source_lane)))
+                rdata += tmp;
         }
 
-        if (bBoundary)
+        if(lane == __ffs(row_mask) - 1)
             gipc::ATOMIC_ADD((&(q[*(&(D4Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
     }
     else if (blockIdx.x >= offset4 && blockIdx.x < offset4 + offset3) {
         int idx = (blockIdx.x - offset4) * blockDim.x + threadIdx.x;
         if (idx >= numbers3) return;
-        __shared__ int offset;
         int Hid = idx / 81;
         int MRid = (idx % 81) / 9;
         int MCid = (idx % 81) % 9;
 
         int vId = MCid / 3;
         int axisId = MCid % 3;
-        int GRtid = idx % 9;
-
         double rdata = Hessians9[Hid].m[MRid][MCid] * (*(&(c[*(&(D3Index[Hid].x) + vId)].x) + axisId));
 
-        if (threadIdx.x == 0) {
-            offset = (9 - GRtid);
-        }
-        gipc::SYNC_THREADS();
-
-        int BRid = (threadIdx.x - offset + 9) / 9;
-        int landidx = (threadIdx.x - offset) % 9;
-        if (BRid == 0) {
-            landidx = threadIdx.x;
-        }
-
-        int warpId = threadIdx.x & 0x1f;
-        bool bBoundary = (landidx == 0) || (warpId == 0);
-
-        unsigned int mark = gipc::WARP_BALLOT(bBoundary); // a bit-mask
-        mark = __brev(mark);
-        unsigned int interval =
-            std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
-
+        const int lane = threadIdx.x & 0x1f;
+        const int valid_lanes = min(32, numbers3 - (idx - lane));
+        const unsigned int active_mask =
+            gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
+        const unsigned int row_mask = __match_any_sync(active_mask, Hid * 9 + MRid);
         for (int iter = 1; iter < 9; iter <<= 1) {
-            double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
-            if (interval >= iter) rdata += tmp;
+            const double tmp = gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
+            const int source_lane = lane + iter;
+            if(source_lane < 32 && (row_mask & (1U << source_lane)))
+                rdata += tmp;
         }
 
-        if (bBoundary)
+        if(lane == __ffs(row_mask) - 1)
             gipc::ATOMIC_ADD((&(q[*(&(D3Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
     }
     else if (blockIdx.x >= offset4 + offset3 && blockIdx.x < offset4 + offset3 + offset2) {
         int idx = (blockIdx.x - offset4 - offset3) * blockDim.x + threadIdx.x;
         if (idx >= numbers2) return;
-        __shared__ int offset;
         int Hid = idx / 36;
         int MRid = (idx % 36) / 6;
         int MCid = (idx % 36) % 6;
 
         int vId = MCid / 3;
         int axisId = MCid % 3;
-        int GRtid = idx % 6;
-
         double rdata = Hessians6[Hid].m[MRid][MCid] * (*(&(c[*(&(D2Index[Hid].x) + vId)].x) + axisId));
 
-        if (threadIdx.x == 0) {
-            offset = (6 - GRtid);
-        }
-        gipc::SYNC_THREADS();
-
-        int BRid = (threadIdx.x - offset + 6) / 6;
-        int landidx = (threadIdx.x - offset) % 6;
-        if (BRid == 0) {
-            landidx = threadIdx.x;
-        }
-
-        int warpId = threadIdx.x & 0x1f;
-        bool bBoundary = (landidx == 0) || (warpId == 0);
-
-        unsigned int mark = gipc::WARP_BALLOT(bBoundary);
-        mark = __brev(mark);
-        unsigned int interval =
-            std::min<unsigned int>(__clz(mark << (warpId + 1)), 31 - warpId);
-
+        const int lane = threadIdx.x & 0x1f;
+        const int valid_lanes = min(32, numbers2 - (idx - lane));
+        const unsigned int active_mask =
+            gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
+        const unsigned int row_mask = __match_any_sync(active_mask, Hid * 6 + MRid);
         for (int iter = 1; iter < 6; iter <<= 1) {
-            double tmp = gipc::WARP_SHFL_DOWN(rdata, iter);
-            if (interval >= iter) rdata += tmp;
+            const double tmp = gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
+            const int source_lane = lane + iter;
+            if(source_lane < 32 && (row_mask & (1U << source_lane)))
+                rdata += tmp;
         }
 
-        if (bBoundary)
+        if(lane == __ffs(row_mask) - 1)
             gipc::ATOMIC_ADD((&(q[*(&(D2Index[Hid].x) + MRid / 3)].x) + MRid % 3), rdata);
     }
     else if (blockIdx.x >= offset4 + offset3 + offset2) {
@@ -468,18 +441,7 @@ __global__ void __PCG_inverse_P(__GEIGEN__::Matrix3x3d* P, int numbers) {
 // Collapse the per-block partial sums in squeue down to one scalar on the
 // host (second-stage reductions followed by a single DtoH copy).
 static double __PCG_reducePartialsToScalar(double* squeue, int numbers) {
-    const unsigned int threadNum = default_threads;
-    const unsigned int sharedMsize = sizeof(double) * (threadNum >> 5);
-    int blockNum = (numbers + threadNum - 1) / threadNum;
-
-    while (numbers > 1) {
-        add_reduction<<<blockNum, threadNum, sharedMsize>>>(squeue, numbers);
-        numbers = blockNum;
-        blockNum = (numbers + threadNum - 1) / threadNum;
-    }
-    double result;
-    cudaMemcpy(&result, squeue, sizeof(double), cudaMemcpyDeviceToHost);
-    return result;
+    return gpuipc::DeviceReduce().sum(squeue, numbers);
 }
 
 // Fused first-stage reduction for the various PCG scalars.
@@ -599,7 +561,21 @@ void PCG_constraintFilter(const device_TetraData* mesh, const double3* input, do
 // 8. PCG / MASPCG main loops
 // =============================================================================
 
+namespace
+{
+bool invalid_energy_scalar(double value)
+{
+    return !std::isfinite(value) || value < 0.0;
+}
+
+bool invalid_curvature_scalar(double value)
+{
+    return !std::isfinite(value) || value <= 0.0;
+}
+}  // namespace
+
 int MASPCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, double3* _mvDir, int vertexNum, int tetrahedraNum, double IPC_dt, double meanVolumn, int cpNum, double threshold) {
+    constexpr int iteration_cap = 3000;
     pcg_data->MP.setPreconditioner(BH, mesh->masses, cpNum);
     double deltaN = 0;
     double delta0 = 0;
@@ -621,18 +597,36 @@ int MASPCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& B
 
     deltaN = My_PCG_General_v_v_Reduction_Algorithm(mesh, pcg_data, pcg_data->r, pcg_data->c, vertexNum);
 
+    if(invalid_energy_scalar(delta0) || invalid_energy_scalar(deltaN))
+    {
+        std::cerr << "MAS-PCG encountered a non-finite or negative energy norm."
+                  << std::endl;
+        return iteration_cap;
+    }
+
     double errorRate = threshold;
     int cgCounts = 0;
-    while (cgCounts < 3000 && deltaN > errorRate * delta0) {
+    while (cgCounts < iteration_cap && deltaN > errorRate * delta0) {
 
         cgCounts++;
         Solve_PCG_AX_B2(mesh, pcg_data->c, pcg_data->q, BH, vertexNum);
         double tempSum = My_PCG_add_Reduction_Algorithm(3, mesh, pcg_data, vertexNum);
+        if(invalid_curvature_scalar(tempSum))
+        {
+            std::cerr << "MAS-PCG lost positive curvature." << std::endl;
+            return iteration_cap;
+        }
         double alpha = deltaN / tempSum;
         deltaO = deltaN;
         PCG_Update_Dx_R(pcg_data->c, pcg_data->dx, pcg_data->q, pcg_data->r, alpha, vertexNum);
         pcg_data->MP.preconditioning(pcg_data->r, pcg_data->s);
         deltaN = My_PCG_General_v_v_Reduction_Algorithm(mesh, pcg_data, pcg_data->r, pcg_data->s, vertexNum);
+        if(invalid_energy_scalar(deltaN) || invalid_curvature_scalar(deltaO))
+        {
+            std::cerr << "MAS-PCG encountered an invalid recurrence scalar."
+                      << std::endl;
+            return iteration_cap;
+        }
         double rate = deltaN / deltaO;
         PCG_FinalStep_UpdateC(mesh, pcg_data->c, pcg_data->s, rate, vertexNum);
     }
@@ -643,6 +637,7 @@ int MASPCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& B
 
 
 int PCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, double3* _mvDir, int vertexNum, int tetrahedraNum, double IPC_dt, double meanVolumn, double threshold) {
+    constexpr int iteration_cap = 30000;
     construct_P2(mesh, pcg_data->P, BH, vertexNum);
     double deltaN = 0;
     double delta0 = 0;
@@ -651,15 +646,32 @@ int PCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, 
     CUDA_SAFE_CALL(cudaMemset(pcg_data->r, 0x0, vertexNum * sizeof(double3)));
     delta0 = My_PCG_add_Reduction_Algorithm(1, mesh, pcg_data, vertexNum);
     deltaN = My_PCG_add_Reduction_Algorithm(2, mesh, pcg_data, vertexNum);
+    if(invalid_energy_scalar(delta0) || invalid_energy_scalar(deltaN))
+    {
+        std::cerr << "PCG encountered a non-finite or negative energy norm."
+                  << std::endl;
+        return iteration_cap;
+    }
     double errorRate = threshold;
     int cgCounts = 0;
-    while (cgCounts < 30000 && deltaN > errorRate * delta0) {
+    while (cgCounts < iteration_cap && deltaN > errorRate * delta0) {
         cgCounts++;
         Solve_PCG_AX_B2(mesh, pcg_data->c, pcg_data->q, BH, vertexNum);
         double tempSum = My_PCG_add_Reduction_Algorithm(3, mesh, pcg_data, vertexNum);
+        if(invalid_curvature_scalar(tempSum))
+        {
+            std::cerr << "PCG lost positive curvature." << std::endl;
+            return iteration_cap;
+        }
         double alpha = deltaN / tempSum;
         deltaO = deltaN;
         deltaN = My_PCG_add_Reduction_Algorithm(4, mesh, pcg_data, vertexNum, alpha);
+        if(invalid_energy_scalar(deltaN) || invalid_curvature_scalar(deltaO))
+        {
+            std::cerr << "PCG encountered an invalid recurrence scalar."
+                      << std::endl;
+            return iteration_cap;
+        }
         double rate = deltaN / deltaO;
         PCG_FinalStep_UpdateC(mesh, pcg_data->c, pcg_data->s, rate, vertexNum);
     }
@@ -672,51 +684,82 @@ int PCG_Process(device_TetraData* mesh, PCG_Data* pcg_data, const BHessian& BH, 
 // =============================================================================
 
 void PCG_Data::Malloc_DEVICE_MEM(const int& vertexNum, const int& tetrahedraNum) {
-    CUDA_SAFE_CALL(cudaMalloc((void**)&squeue, std::max(vertexNum, tetrahedraNum) * sizeof(double)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&P, vertexNum * sizeof(__GEIGEN__::Matrix3x3d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&r, vertexNum * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&c, vertexNum * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&z, vertexNum * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&q, vertexNum * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&s, vertexNum * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&dx, vertexNum * sizeof(double3)));
+    squeue.resize(std::max(vertexNum, tetrahedraNum));
+    P.resize(vertexNum);
+    r.resize(vertexNum);
+    c.resize(vertexNum);
+    z.resize(vertexNum);
+    q.resize(vertexNum);
+    s.resize(vertexNum);
+    dx.resize(vertexNum);
     CUDA_SAFE_CALL(cudaMemset(z, 0, vertexNum * sizeof(double3)));
 
     if (P_type > 0) {
-        CUDA_SAFE_CALL(cudaMalloc((void**)&preconditionTempVec3, vertexNum * sizeof(double3)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&filterTempVec3, vertexNum * sizeof(double3)));
+        preconditionTempVec3.resize(vertexNum);
+        filterTempVec3.resize(vertexNum);
     }
 }
 
 void PCG_Data::FREE_DEVICE_MEM() {
-    CUDA_SAFE_CALL(cudaFree(squeue));
-    CUDA_SAFE_CALL(cudaFree(P));
-    CUDA_SAFE_CALL(cudaFree(r));
-    CUDA_SAFE_CALL(cudaFree(c));
-    CUDA_SAFE_CALL(cudaFree(z));
-    CUDA_SAFE_CALL(cudaFree(q));
-    CUDA_SAFE_CALL(cudaFree(s));
-    CUDA_SAFE_CALL(cudaFree(dx));
+    squeue.release();
+    P.release();
+    r.release();
+    c.release();
+    z.release();
+    q.release();
+    s.release();
+    dx.release();
     if (P_type > 0) {
-        CUDA_SAFE_CALL(cudaFree(filterTempVec3));
-        CUDA_SAFE_CALL(cudaFree(preconditionTempVec3));
+        filterTempVec3.release();
+        preconditionTempVec3.release();
     }
     if (P_type == 1) {
         MP.FreeMAS();
     }
 }
 
-void BHessian::updateDNum(const int& tri_Num, const int& tet_number, const uint32_t* cpNums, const uint32_t* last_cpNums, const int& tri_edge_number) {
+void BHessian::updateDNum(const int& tri_Num,
+                          const int& tet_number,
+                          const uint32_t* cpNums,
+                          const uint32_t* last_cpNums,
+                          const int& tri_edge_number,
+                          uint32_t ground_count,
+                          uint32_t previous_ground_count,
+                          uint32_t soft_count) {
 
-    DNum[1] = cpNums[1];
-    DNum[2] = cpNums[2] + tri_Num;
-    DNum[3] = tet_number + cpNums[3] + tri_edge_number;
+    if(tri_Num < 0 || tet_number < 0 || tri_edge_number < 0)
+    {
+        std::cerr << "Negative fixed-energy Hessian count." << std::endl;
+        std::abort();
+    }
+
+    uint64_t d1_count = static_cast<uint64_t>(ground_count) + soft_count;
+#ifdef USE_FRICTION
+    d1_count += previous_ground_count;
+#endif
+    uint64_t d2_count = cpNums[1];
+    uint64_t d3_count = static_cast<uint64_t>(cpNums[2]) + tri_Num;
+    uint64_t d4_count = static_cast<uint64_t>(cpNums[3]) + tet_number
+                        + tri_edge_number;
 
 #ifdef USE_FRICTION
-    DNum[1] += last_cpNums[1];
-    DNum[2] += last_cpNums[2];
-    DNum[3] += last_cpNums[3];
+    d2_count += last_cpNums[1];
+    d3_count += last_cpNums[2];
+    d4_count += last_cpNums[3];
 #endif
+    const uint64_t max_count = std::numeric_limits<uint32_t>::max();
+    if(d1_count > max_count || d2_count > max_count || d3_count > max_count
+       || d4_count > max_count)
+    {
+        std::cerr << "Hessian block count exceeds the 32-bit index range."
+                  << std::endl;
+        std::abort();
+    }
+    DNum[0] = static_cast<uint32_t>(d1_count);
+    DNum[1] = static_cast<uint32_t>(d2_count);
+    DNum[2] = static_cast<uint32_t>(d3_count);
+    DNum[3] = static_cast<uint32_t>(d4_count);
+    ensure_current_capacity();
 }
 
 void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number,
@@ -726,41 +769,47 @@ void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number,
                                    const int& triangle_num,
                                    const int& tri_Edge_number)
 {
-
-    int minCollisionBuffer4 = std::max(2 * (surfvert_number + surfEdge_number), 100000);
-    int minCollisionBuffer3 = std::max(2 * (surfvert_number + surfEdge_number), 100000);
-    int minCollisionBuffer2 = std::max(2 * (surfvert_number + surfEdge_number), 100000);
-    int minCollisionBuffer1 = 2 * surfvert_number;
-
-
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H12x12,
-                              (minCollisionBuffer4 + tet_number + tri_Edge_number)
-                                  * sizeof(__GEIGEN__::Matrix12x12d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H9x9,
-                              (minCollisionBuffer3 + triangle_num)
-                                  * sizeof(__GEIGEN__::Matrix9x9d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H6x6,
-                              minCollisionBuffer2 * sizeof(__GEIGEN__::Matrix6x6d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&H3x3,
-                              minCollisionBuffer1 * sizeof(__GEIGEN__::Matrix3x3d)));
-
-
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D1Index, minCollisionBuffer1 * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D2Index, minCollisionBuffer2 * sizeof(uint2)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D3Index,
-                              (minCollisionBuffer3 + triangle_num) * sizeof(uint3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&D4Index,
-                              (minCollisionBuffer4 + tet_number + tri_Edge_number)
-                                  * sizeof(uint4)));
+    if(tet_number < 0 || surfvert_number < 0 || surface_number < 0
+       || surfEdge_number < 0 || triangle_num < 0 || tri_Edge_number < 0)
+    {
+        std::cerr << "Negative initial Hessian count." << std::endl;
+        std::abort();
+    }
+    constexpr size_t initial_contact_blocks = 100'000;
+    const size_t count4 = initial_contact_blocks + static_cast<size_t>(tet_number)
+                          + static_cast<size_t>(tri_Edge_number);
+    const size_t count3 = initial_contact_blocks + static_cast<size_t>(triangle_num);
+    const size_t count1 = std::max(initial_contact_blocks,
+                                   2 * static_cast<size_t>(surfvert_number));
+    H12x12.reserve(count4);
+    D4Index.reserve(count4);
+    H9x9.reserve(count3);
+    D3Index.reserve(count3);
+    H6x6.reserve(initial_contact_blocks);
+    D2Index.reserve(initial_contact_blocks);
+    H3x3.reserve(count1);
+    D1Index.reserve(count1);
 }
 
 void BHessian::FREE_DEVICE_MEM() {
-    CUDA_SAFE_CALL(cudaFree(H12x12));
-    CUDA_SAFE_CALL(cudaFree(H9x9));
-    CUDA_SAFE_CALL(cudaFree(H6x6));
-    CUDA_SAFE_CALL(cudaFree(H3x3));
-    CUDA_SAFE_CALL(cudaFree(D1Index));
-    CUDA_SAFE_CALL(cudaFree(D2Index));
-    CUDA_SAFE_CALL(cudaFree(D3Index));
-    CUDA_SAFE_CALL(cudaFree(D4Index));
+    H12x12.release();
+    H9x9.release();
+    H6x6.release();
+    H3x3.release();
+    D1Index.release();
+    D2Index.release();
+    D3Index.release();
+    D4Index.release();
+}
+
+void BHessian::ensure_current_capacity()
+{
+    H3x3.resize_discard(DNum[0]);
+    D1Index.resize_discard(DNum[0]);
+    H6x6.resize_discard(DNum[1]);
+    D2Index.resize_discard(DNum[1]);
+    H9x9.resize_discard(DNum[2]);
+    D3Index.resize_discard(DNum[2]);
+    H12x12.resize_discard(DNum[3]);
+    D4Index.resize_discard(DNum[3]);
 }

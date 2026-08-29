@@ -17,26 +17,27 @@
 #define _PCG_SOLVER_CUH_
 #include <cuda_runtime.h>
 #include "device_fem_data.cuh"
+#include "device_buffer.h"
 #include <cstdint>
 #include "MASPreconditioner.cuh"
 
 class PCG_Data {
 public:
-	double* squeue;                 // partial-sum queue for reductions
-	double3* b;                     // right-hand side (owned by caller)
-	__GEIGEN__::Matrix3x3d* P;      // block-Jacobi preconditioner blocks
-	double3* r;                     // residual
-	double3* c;                     // search direction
-	double3* q;                     // A * c
-	double3* s;                     // preconditioned residual
-	double3* z;                     // initial guess workspace
-	double3* dx;                    // solution increment
+	gpuipc::DeviceBuffer<double> squeue; // persistent partial-sum queue
+	double3* b = nullptr;           // right-hand side (owned by caller)
+	gpuipc::DeviceBuffer<__GEIGEN__::Matrix3x3d> P;
+	gpuipc::DeviceBuffer<double3> r;
+	gpuipc::DeviceBuffer<double3> c;
+	gpuipc::DeviceBuffer<double3> q;
+	gpuipc::DeviceBuffer<double3> s;
+	gpuipc::DeviceBuffer<double3> z;
+	gpuipc::DeviceBuffer<double3> dx;
 
-	double3* filterTempVec3;        // scratch for the constraint filter (MAS)
-	double3* preconditionTempVec3;  // scratch for preconditioner output (MAS)
+	gpuipc::DeviceBuffer<double3> filterTempVec3;
+	gpuipc::DeviceBuffer<double3> preconditionTempVec3;
 	MASPreconditioner MP;
 
-	int P_type;
+	int P_type = 0;
 
 public:
 	void Malloc_DEVICE_MEM(const int& vertex_num, const int& tetradedra_num);

@@ -7,11 +7,9 @@
 //
 
 #include "MASPreconditioner.cuh"
+#include "cuda_cub_wrappers.h"
 #include "cuda_tools.h"
 #include "device_launch_parameters.h"
-
-#include <thrust/device_ptr.h>
-#include <thrust/sort.h>
 
 #include <vector>
 #include <bitset>
@@ -87,6 +85,10 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
     int          warpId      = idx / BANKSIZE;
     int          localWarpId = threadIdx.x / BANKSIZE;
     int          laneId      = idx % BANKSIZE;
+    const int    warp_begin  = idx - laneId;
+    const int    valid_lanes = __mm_min(BANKSIZE, vertNum - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     unsigned int connectMsk  = _fineConnectedMsk[idx];
     //unsigned int connectMsk = cacheMask1;
     __shared__ int unsigned cacheMask[DEFAULT_BLOCKSIZE];
@@ -96,8 +98,9 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
         prefixSum[localWarpId] = 0;
     }
     cacheMask[threadIdx.x] = connectMsk;
+    __syncwarp(active_mask);
     unsigned int visited   = (1U << laneId);
-    while(connectMsk != -1)
+    while(connectMsk != 0xffffffffU)
     {
         unsigned int todo = visited ^ connectMsk;
 
@@ -119,6 +122,8 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
         gipc::ATOMIC_ADD(prefixSum + localWarpId, 1);
     }
 
+    __syncwarp(active_mask);
+
     if(laneId == 0)
     {
         _prefixOriginal[warpId] = prefixSum[localWarpId];
@@ -139,6 +144,10 @@ __global__ void _buildLevel1(int2*               _levelSize,
     int warpId      = idx / BANKSIZE;
     int localWarpId = threadIdx.x / BANKSIZE;
     int laneId      = idx % BANKSIZE;
+    const int warp_begin = idx - laneId;
+    const int valid_lanes = __mm_min(BANKSIZE, vertNum - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
 
     __shared__ unsigned int electedMask[BANKSIZE];
     __shared__ unsigned int lanePrefix[BANKSIZE * BANKSIZE];
@@ -146,6 +155,7 @@ __global__ void _buildLevel1(int2*               _levelSize,
     {
         electedMask[localWarpId] = 0;
     }
+    __syncwarp(active_mask);
     if(idx == vertNum - 1)
     {
         _levelSize[1].x = _prefixSumOriginal[warpId] + _prefixOriginal[warpId];
@@ -160,6 +170,7 @@ __global__ void _buildLevel1(int2*               _levelSize,
     {
         atomicOr(electedMask + localWarpId, (1U << laneId));
     }
+    __syncwarp(active_mask);
 
     //unsigned int lanePrefix2 = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     //lanePrefix2 += _prefixSumOriginal[warpId];
@@ -169,6 +180,7 @@ __global__ void _buildLevel1(int2*               _levelSize,
 
     lanePrefix[threadIdx.x] = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     lanePrefix[threadIdx.x] += _prefixSumOriginal[warpId];
+    __syncwarp(active_mask);
 
     unsigned int elected_lane = __ffs(connMsk) - 1;
     unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //gipc::WARP_SHFL(lanePrefix, elected_lane);
@@ -190,9 +202,12 @@ __global__ void _buildConnectMaskLx(const unsigned int* _neighborStart,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= vertNum)
         return;
-    int warpId      = idx / BANKSIZE;
     int localWarpId = threadIdx.x / BANKSIZE;
     int laneId      = idx % BANKSIZE;
+    const int warp_begin = idx - laneId;
+    const int valid_lanes = __mm_min(BANKSIZE, vertNum - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
 
     unsigned int prefixMsk = _fineConnectedMsk[idx];
     unsigned int connMsk   = 0;
@@ -221,11 +236,13 @@ __global__ void _buildConnectMaskLx(const unsigned int* _neighborStart,
 
     __shared__ int cacheMsk[DEFAULT_BLOCKSIZE];
     cacheMsk[threadIdx.x] = 0;
+    __syncwarp(active_mask);
 
+    unsigned int cacheIndex;
     if(__popc(prefixMsk) == BANKSIZE)
     {
         atomicOr(cacheMsk + localWarpId * BANKSIZE, connMsk);
-        connMsk = cacheMsk[localWarpId * BANKSIZE];
+        cacheIndex = localWarpId * BANKSIZE;
         //if (laneId == 0) {
         //	cacheMsk[localWarpId] = 0;
         //}
@@ -237,8 +254,10 @@ __global__ void _buildConnectMaskLx(const unsigned int* _neighborStart,
         {
             atomicOr(cacheMsk + localWarpId * BANKSIZE + electedLane, connMsk);
         }
-        connMsk = cacheMsk[localWarpId * BANKSIZE + electedLane];
+        cacheIndex = localWarpId * BANKSIZE + electedLane;
     }
+    __syncwarp(active_mask);
+    connMsk = cacheMsk[cacheIndex];
 
     unsigned int electedPrefix = __popc(prefixMsk & _LanemaskLt(laneId));
 
@@ -256,6 +275,10 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
     int            warpId      = idx / BANKSIZE;
     int            localWarpId = threadIdx.x / BANKSIZE;
     int            laneId      = idx % BANKSIZE;
+    const int      warp_begin  = idx - laneId;
+    const int      valid_lanes = __mm_min(BANKSIZE, number - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     __shared__ int prefixSum[DEFAULT_WARPNUM];
     if(laneId == 0)
     {
@@ -269,6 +292,7 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
 
     __shared__ unsigned int cachedMsk[DEFAULT_BLOCKSIZE];
     cachedMsk[threadIdx.x] = connMsk;
+    __syncwarp(active_mask);
     unsigned int visited   = (1U << laneId);
 
     while(true)
@@ -294,6 +318,8 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
         gipc::ATOMIC_ADD(prefixSum + localWarpId, 1);
     }
 
+    __syncwarp(active_mask);
+
     if(laneId == 0)
         _nextPrefix[warpId] = prefixSum[localWarpId];
 }
@@ -313,6 +339,10 @@ __global__ void _prefixSumLx(int2*         _levelSize,
     int warpId      = idx / BANKSIZE;
     int localWarpId = threadIdx.x / BANKSIZE;
     int laneId      = idx % BANKSIZE;
+    const int warp_begin = idx - laneId;
+    const int valid_lanes = __mm_min(BANKSIZE, number - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
 
     __shared__ unsigned int electedMask[BANKSIZE];
     __shared__ unsigned int lanePrefix[BANKSIZE * BANKSIZE];
@@ -320,6 +350,7 @@ __global__ void _prefixSumLx(int2*         _levelSize,
     {
         electedMask[localWarpId] = 0;
     }
+    __syncwarp(active_mask);
 
     if(idx == number - 1)
     {
@@ -335,9 +366,11 @@ __global__ void _prefixSumLx(int2*         _levelSize,
     {
         atomicOr(electedMask + localWarpId, (1U << laneId));
     }
+    __syncwarp(active_mask);
 
     lanePrefix[threadIdx.x] = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     lanePrefix[threadIdx.x] += _nextPrefixSum[warpId];
+    __syncwarp(active_mask);
 
     unsigned int elected_lane = __ffs(connMsk) - 1;
     unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //gipc::WARP_SHFL(lanePrefix, elected_lane);
@@ -361,7 +394,7 @@ __global__ void _computeNextLevel(int*          _coarseSpaceTable,
 }
 
 __global__ void _aggregationKernel(
-    int* _denseLevel, int4* _coarseTable, int* _goingNext, int levelNum, int number)
+    int* _denseLevel, int* _coarseTable, int* _goingNext, int levelNum, int number)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= number)
@@ -369,8 +402,6 @@ __global__ void _aggregationKernel(
 
     int currentId = idx;
     int aggLevel  = levelNum - 1;
-    //__shared__ int4 ctable[DEFAULT_BLOCKSIZE];
-    int4 ctable;
     for(int l = 0; l < levelNum - 1; l++)
     {
         int next = _goingNext[currentId];
@@ -381,15 +412,14 @@ __global__ void _aggregationKernel(
         //  aggLevel = __mm_min(l, aggLevel);
         //}
 
-        currentId          = next;
-        *(&(ctable.x) + l) = next;
+        currentId                       = next;
+        _coarseTable[l * number + idx] = next;
     }
 
     _denseLevel[idx] = aggLevel;
 
     //printf("%d   %d\n", aggLevel, idx);
 
-    _coarseTable[idx] = ctable;
 }
 
 
@@ -534,8 +564,6 @@ __global__ void _prepareHessian(const __GEIGEN__::Matrix12x12d* Hessians12,
         int vertCid = *(nodeInex + vcid);
         int vertRid = *(nodeInex + vrid);
         //int Pid = vertCid / 12;
-        int cha = vertCid - vertRid;
-
         int roffset = qrid % 3;
         int coffset = qcid % 3;
 
@@ -611,9 +639,6 @@ __global__ void __setMassMat_P96(const double*             _masses,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= number)
         return;
-    int warpId = idx / BANKSIZE;
-    int laneId = idx % BANKSIZE;
-
     Precision_T mass = _masses[idx];
 
     int Pid = idx / BANKSIZE;
@@ -800,17 +825,35 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
     __shared__ double c_sumResidual[DEFAULT_BLOCKSIZE * 3];
 
     unsigned int connectMsk = _fineConnectMsk[idx];
-    if(__popc(connectMsk) == BANKSIZE)
+    const int warp_begin = idx - laneId;
+    const int valid_lanes = __mm_min(BANKSIZE, numbers - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
+    const bool fully_connected = __popc(connectMsk) == BANKSIZE;
+    const unsigned int full_cluster_mask =
+        gipc::WARP_BALLOT(fully_connected, active_mask);
+    const unsigned int sparse_cluster_mask = active_mask & ~full_cluster_mask;
+    if(fully_connected)
     {
         for(int iter = 1; iter < BANKSIZE; iter <<= 1)
         {
-            r.x += gipc::WARP_SHFL_DOWN(r.x, iter);
-            r.y += gipc::WARP_SHFL_DOWN(r.y, iter);
-            r.z += gipc::WARP_SHFL_DOWN(r.z, iter);
+            const Precision_TM other_x =
+                gipc::WARP_SHFL_DOWN(r.x, iter, full_cluster_mask);
+            const Precision_TM other_y =
+                gipc::WARP_SHFL_DOWN(r.y, iter, full_cluster_mask);
+            const Precision_TM other_z =
+                gipc::WARP_SHFL_DOWN(r.z, iter, full_cluster_mask);
+            const int source_lane = laneId + iter;
+            if(source_lane < BANKSIZE && (full_cluster_mask & (1U << source_lane)))
+            {
+                r.x += other_x;
+                r.y += other_y;
+                r.z += other_z;
+            }
         }
         //int level = 0;
 
-        if(laneId == 0)
+        if(laneId == __ffs(full_cluster_mask) - 1)
         {
             while(level < levelNum - 1)
             {
@@ -830,11 +873,13 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
         c_sumResidual[threadIdx.x]                         = 0;
         c_sumResidual[threadIdx.x + DEFAULT_BLOCKSIZE]     = 0;
         c_sumResidual[threadIdx.x + 2 * DEFAULT_BLOCKSIZE] = 0;
+        __syncwarp(sparse_cluster_mask);
         gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane, r.x);
         gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane + DEFAULT_BLOCKSIZE,
                   r.y);
         gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane + 2 * DEFAULT_BLOCKSIZE,
                   r.z);
+        __syncwarp(sparse_cluster_mask);
 
         unsigned int electedPrefix = __popc(connectMsk & _LanemaskLt(laneId));
         if(electedPrefix == 0)
@@ -879,7 +924,7 @@ __global__ void __buildMultiLevelR(
 
 __global__ void __collectFinalZ(double3*            _Z,
                                 const Precision_T3* d_multiLevelZ,
-                                const int4*         _coarseTable,
+                                const int*          _coarseTable,
                                 int                 levelnum,
                                 int                 number)
 {
@@ -891,11 +936,9 @@ __global__ void __collectFinalZ(double3*            _Z,
     cz.x          = d_multiLevelZ[idx].x;
     cz.y          = d_multiLevelZ[idx].y;
     cz.z          = d_multiLevelZ[idx].z;
-    int4 table    = _coarseTable[idx];
-    int* tablePtr = &(table.x);
-    for(int i = 1; i < __mm_min(levelnum, 4); i++)
+    for(int level = 0; level < levelnum - 1; level++)
     {
-        int now = *(tablePtr + i - 1);
+        int now = _coarseTable[level * number + idx];
         cz.x += d_multiLevelZ[now].x;
         cz.y += d_multiLevelZ[now].y;
         cz.z += d_multiLevelZ[now].z;
@@ -954,26 +997,21 @@ __global__ void _schwarzLocalXSym3(const __GEIGEN__::MasMatrixSymf* Pred,
                 + Pred[Hid].M[index].m[2][r3id] * smR[lvcid].z;
     }
     //gipc::SYNC_THREADS();
-    int  warpId    = threadIdx.x & 0x1f;
-    int  landidx   = threadIdx.x % BANKSIZE;
-    bool bBoundary = (landidx == 0) || (warpId == 0);
-
-    unsigned int mark     = gipc::WARP_BALLOT(bBoundary);  // a bit-mask
-    mark                  = __brev(mark);
-    unsigned int interval = __mm_min(__clz(mark << (warpId + 1)), 31 - warpId);
-
+    const int lane = threadIdx.x & 0x1f;
+    const int warp_begin = idx - lane;
+    const int valid_lanes = __mm_min(BANKSIZE, number - warp_begin);
+    const unsigned int active_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     int maxSize = __mm_min(32, BANKSIZE);
     for(int iter = 1; iter < maxSize; iter <<= 1)
     {
-        Precision_TM tmpx = gipc::WARP_SHFL_DOWN(rdata, iter);
-        if(interval >= iter)
-        {
-
+        const Precision_TM tmpx =
+            gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
+        if(lane + iter < valid_lanes)
             rdata += tmpx;
-        }
     }
 
-    if(bBoundary)
+    if(lane == 0)
     {
         gipc::ATOMIC_ADD((&(mZ[vrid].x) + MRid % 3), rdata);
     }
@@ -981,7 +1019,7 @@ __global__ void _schwarzLocalXSym3(const __GEIGEN__::MasMatrixSymf* Pred,
 
 __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
                                           const int*        _pCoarseSpaceTable,
-                                          const const int4* _collisionPair,
+                                          const int4* _collisionPair,
                                           int               level,
                                           int               vertNum,
                                           int               number)
@@ -997,7 +1035,6 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
         {
             MMCVIDI.w = -MMCVIDI.w - 1;
         }
-        int cpVertNum = 4;
         int cpVid[4];
         if(_pCoarseSpaceTable)
         {
@@ -1046,7 +1083,6 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
                 MMCVIDI.z = -MMCVIDI.z - 1;
                 MMCVIDI.w = -MMCVIDI.w - 1;
 
-                int cpVertNum = 4;
                 int cpVid[4];
                 if(_pCoarseSpaceTable)
                 {
@@ -1086,7 +1122,6 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
             }
             else
             {
-                int cpVertNum = 2;
                 int cpVid[2];
                 if(_pCoarseSpaceTable)
                 {
@@ -1132,7 +1167,6 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
                 MMCVIDI.y = -MMCVIDI.y - 1;
                 MMCVIDI.w = -MMCVIDI.w - 1;
 
-                int cpVertNum = 4;
                 int cpVid[4];
                 if(_pCoarseSpaceTable)
                 {
@@ -1172,7 +1206,6 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
             }
             else
             {
-                int cpVertNum = 3;
                 int cpVid[3];
                 if(_pCoarseSpaceTable)
                 {
@@ -1213,7 +1246,6 @@ __global__ void _buildCollisionConnection(unsigned int*     _pConnect,
         }
         else
         {
-            int cpVertNum = 4;
             int cpVid[4];
             if(_pCoarseSpaceTable)
             {
@@ -1287,9 +1319,8 @@ void MASPreconditioner::BuildLevel1()
     int numBlocks = (number + blockSize - 1) / blockSize;
     //exclusive(d_prefixOriginal, d_prefixSumOriginal); wait to do;
     int warpNum = (number + 31) / 32;
-    thrust::exclusive_scan(thrust::device_ptr<int>(d_prefixOriginal),
-                           thrust::device_ptr<int>(d_prefixOriginal) + warpNum,
-                           thrust::device_ptr<int>(d_prefixSumOriginal));
+    gpuipc::DeviceScan().exclusive_sum(
+        d_prefixOriginal.data(), d_prefixSumOriginal.data(), warpNum);
     _buildLevel1<<<numBlocks, blockSize>>>(d_levelSize,
                                            d_coarseSpaceTables,
                                            d_goingNext,
@@ -1347,9 +1378,8 @@ void MASPreconditioner::PrefixSumLx(int level)
     int numBlocks  = (number + blockSize - 1) / blockSize;
 
     int warpNum = (number + 31) / 32;
-    thrust::exclusive_scan(thrust::device_ptr<unsigned int>(d_nextPrefix),
-                           thrust::device_ptr<unsigned int>(d_nextPrefix) + warpNum,
-                           thrust::device_ptr<unsigned int>(d_nextPrefixSum));
+    gpuipc::DeviceScan().exclusive_sum(
+        d_nextPrefix.data(), d_nextPrefixSum.data(), warpNum);
 
     _prefixSumLx<<<numBlocks, blockSize>>>(
         d_levelSize, d_nextPrefix, d_nextPrefixSum, d_nextConnectMask, d_goingNext, level, levelBegin, number);
@@ -1621,6 +1651,8 @@ void MASPreconditioner::setPreconditioner(const BHessian& BH, const double* mass
 
     ReorderRealtime(cpNum);
 
+    ensureRuntimeCapacity();
+
     //cudaEventRecord(end0);
 
     CUDA_SAFE_CALL(cudaMemset(
@@ -1673,59 +1705,69 @@ void MASPreconditioner::initPreconditioner(int vertNum, int totalNeighborNum, in
     computeNumLevels(vertNum);
     _collisonPairs = m_collisonPairs;
 
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_denseLevel, vertNum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_coarseTable, vertNum * sizeof(int4)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_coarseSpaceTables,
-                              vertNum * levelnum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_levelSize, (levelnum + 1) * sizeof(int2)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_goingNext,
-                              vertNum * levelnum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_prefixOriginal, vertNum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_nextPrefix, vertNum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_nextPrefixSum, vertNum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_prefixSumOriginal, vertNum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_fineConnectMask, vertNum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_nextConnectMask, vertNum * sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborList, totalNeighborNum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborStart, vertNum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborStartTemp, vertNum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborNum, vertNum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborListInit, totalNeighborNum * sizeof(int)));
-    //CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborStart, vertNum * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_neighborNumInit, vertNum * sizeof(int)));
+    d_denseLevel.resize(vertNum);
+    d_coarseTable.resize(static_cast<size_t>(vertNum) * (levelnum - 1));
+    d_coarseSpaceTables.resize(static_cast<size_t>(vertNum) * levelnum);
+    d_levelSize.resize(levelnum + 1);
+    const size_t padded_node_count =
+        (static_cast<size_t>(vertNum) + BANKSIZE - 1) / BANKSIZE * BANKSIZE;
+    d_goingNext.resize(padded_node_count * levelnum);
+    d_prefixOriginal.resize(vertNum);
+    d_nextPrefix.resize(vertNum);
+    d_nextPrefixSum.resize(vertNum);
+    d_prefixSumOriginal.resize(vertNum);
+    d_fineConnectMask.resize(vertNum);
+    d_nextConnectMask.resize(vertNum);
+    d_neighborList.resize(totalNeighborNum);
+    d_neighborStart.resize(vertNum);
+    d_neighborStartTemp.resize(vertNum);
+    d_neighborNum.resize(vertNum);
+    d_neighborListInit.resize(totalNeighborNum);
+    d_neighborNumInit.resize(vertNum);
 
-    int totalCluster = ReorderRealtime(0) * 1.05;
+    ReorderRealtime(0);
+    ensureRuntimeCapacity();
+}
 
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_Mat96,
-                              totalCluster / BANKSIZE * sizeof(__GEIGEN__::Matrix96x96T)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_inverseMat96,
-                              totalCluster / BANKSIZE * sizeof(__GEIGEN__::MasMatrixSymf)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_multiLevelR, totalCluster * sizeof(Precision_T3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&d_multiLevelZ, totalCluster * sizeof(Precision_T3)));
+void MASPreconditioner::ensureRuntimeCapacity()
+{
+    if(totalNumberClusters < totalNodes || totalNumberClusters % BANKSIZE != 0)
+    {
+        std::cerr << "Invalid MAS cluster count: " << totalNumberClusters
+                  << " (nodes=" << totalNodes << ")" << std::endl;
+        std::abort();
+    }
+
+    const size_t clusterCount = static_cast<size_t>(totalNumberClusters);
+    const size_t blockCount   = clusterCount / BANKSIZE;
+    d_Mat96.resize_discard(blockCount);
+    d_inverseMat96.resize_discard(blockCount);
+    d_multiLevelR.resize_discard(clusterCount);
+    d_multiLevelZ.resize_discard(clusterCount);
 }
 
 void MASPreconditioner::FreeMAS()
 {
-
-    CUDA_SAFE_CALL(cudaFree(d_denseLevel));
-    CUDA_SAFE_CALL(cudaFree(d_coarseSpaceTables));
-    CUDA_SAFE_CALL(cudaFree(d_coarseTable));
-    CUDA_SAFE_CALL(cudaFree(d_levelSize));
-    CUDA_SAFE_CALL(cudaFree(d_goingNext));
-    CUDA_SAFE_CALL(cudaFree(d_prefixOriginal));
-    CUDA_SAFE_CALL(cudaFree(d_nextPrefix));
-    CUDA_SAFE_CALL(cudaFree(d_nextPrefixSum));
-    CUDA_SAFE_CALL(cudaFree(d_prefixSumOriginal));
-    CUDA_SAFE_CALL(cudaFree(d_fineConnectMask));
-    CUDA_SAFE_CALL(cudaFree(d_nextConnectMask));
-    CUDA_SAFE_CALL(cudaFree(d_neighborList));
-    CUDA_SAFE_CALL(cudaFree(d_neighborListInit));
-    CUDA_SAFE_CALL(cudaFree(d_neighborStart));
-    CUDA_SAFE_CALL(cudaFree(d_neighborStartTemp));
-    CUDA_SAFE_CALL(cudaFree(d_neighborNum));
-    CUDA_SAFE_CALL(cudaFree(d_neighborNumInit));
-    CUDA_SAFE_CALL(cudaFree(d_Mat96));
-    CUDA_SAFE_CALL(cudaFree(d_inverseMat96));
-    CUDA_SAFE_CALL(cudaFree(d_multiLevelR));
-    CUDA_SAFE_CALL(cudaFree(d_multiLevelZ));
+    d_denseLevel.release();
+    d_coarseSpaceTables.release();
+    d_coarseTable.release();
+    d_levelSize.release();
+    d_goingNext.release();
+    d_prefixOriginal.release();
+    d_nextPrefix.release();
+    d_nextPrefixSum.release();
+    d_prefixSumOriginal.release();
+    d_fineConnectMask.release();
+    d_nextConnectMask.release();
+    d_neighborList.release();
+    d_neighborListInit.release();
+    d_neighborStart.release();
+    d_neighborStartTemp.release();
+    d_neighborNum.release();
+    d_neighborNumInit.release();
+    d_Mat96.release();
+    d_inverseMat96.release();
+    d_multiLevelR.release();
+    d_multiLevelZ.release();
+    totalNumberClusters = 0;
 }

@@ -8,6 +8,8 @@
 
 #include "GL/glew.h"
 #include "GL/freeglut.h"
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <cuda_runtime.h>
@@ -851,6 +853,19 @@ void initScene1(int argc, char** argv)
     //printf("maxConer: %f  %f   %f           minCorner: %f  %f   %f\n", tetMesh.maxConer.x, tetMesh.maxConer.y, tetMesh.maxConer.z, tetMesh.minConer.x, tetMesh.minConer.y, tetMesh.minConer.z);
 
     //printf("restSNKE: %f\n", ipc.RestNHEnergy);
+    if(std::getenv("GIPC_STRESS_DYNAMIC_MEMORY"))
+    {
+        std::cerr << "Dynamic-memory stress mode: starting pair buffers at one "
+                     "element and Hessian buffers at zero."
+                  << std::endl;
+        ipc._collisonPairs.release();
+        ipc._ccd_collisonPairs.release();
+        ipc._MatIndex.release();
+        ipc._collisonPairs.reserve(1);
+        ipc._ccd_collisonPairs.reserve(1);
+        ipc._MatIndex.reserve(1);
+        ipc.BH.FREE_DEVICE_MEM();
+    }
     ipc.buildCP();
     ipc.pcg_data.b        = d_tetMesh.fb;
     ipc._moveDir          = ipc.pcg_data.dx;
@@ -1132,6 +1147,12 @@ void SpecialKey(GLint key, GLint x, GLint y)
 
 int main(int argc, char** argv)
 {
+    int batch_steps = 0;
+    const char* batch_steps_value = std::getenv("GIPC_STEPS");
+    const bool batch_mode = batch_steps_value != nullptr;
+    if(const char* value = batch_steps_value)
+        batch_steps = std::max(0, std::atoi(value));
+
     glutInit(&argc, argv);
     //glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
 
@@ -1151,6 +1172,40 @@ int main(int argc, char** argv)
     //{
     //    totalFrames = atoi(argv[2]);
     //}
+
+    if(batch_mode)
+    {
+        glutHideWindow();
+        for(int i = 0; i < batch_steps; ++i)
+            ipc.IPC_Solver(d_tetMesh);
+        CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+        std::vector<double3> vertices(ipc.vertexNum);
+        CUDA_SAFE_CALL(cudaMemcpy(vertices.data(),
+                                  ipc._vertexes,
+                                  vertices.size() * sizeof(double3),
+                                  cudaMemcpyDeviceToHost));
+        for(size_t i = 0; i < vertices.size(); ++i)
+        {
+            const auto& v = vertices[i];
+            if(!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
+            {
+                std::cerr << "Non-finite vertex at frame " << batch_steps
+                          << ", vertex " << i << std::endl;
+                return 3;
+            }
+        }
+
+        if(const char* dump_path = std::getenv("GIPC_DUMP_STATE"))
+        {
+            std::ofstream output(dump_path, std::ios::binary | std::ios::trunc);
+            output.write(reinterpret_cast<const char*>(vertices.data()),
+                         static_cast<std::streamsize>(vertices.size() * sizeof(double3)));
+            if(!output)
+                return 2;
+        }
+        return 0;
+    }
 
     //glEnable(GL_VERTEX_PROGRAM_POINT_SIZE_NV);
     //glEnable(GL_POINT_SPRITE_ARB);
@@ -1176,5 +1231,5 @@ int main(int argc, char** argv)
 
 
     glutMainLoop();
-    //return 0;
+    return 0;
 }

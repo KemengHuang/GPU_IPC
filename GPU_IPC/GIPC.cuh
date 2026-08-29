@@ -11,55 +11,60 @@
 #define _GIPC_H_
 #include "mlbvh.cuh"
 #include "device_fem_data.cuh"
+#include "device_buffer.h"
 
 #include "PCG_SOLVER.cuh"
 
 
 class GIPC {
 public:
-	bool animation;
-	double3* _vertexes;
-	double3* _rest_vertexes;
-	uint3* _faces;
-	uint2* _edges;
-	uint32_t* _surfVerts;
+	bool animation = false;
+	double3* _vertexes = nullptr;
+	double3* _rest_vertexes = nullptr;
+	gpuipc::DeviceBuffer<uint3> _faces;
+	gpuipc::DeviceBuffer<uint2> _edges;
+	gpuipc::DeviceBuffer<uint32_t> _surfVerts;
 
 
-	double3* targetVert;	
-	uint32_t* targetInd;	
-	uint32_t softNum;
-	uint32_t triangleNum;
+	double3* targetVert = nullptr;
+	uint32_t* targetInd = nullptr;
+	uint32_t softNum = 0;
+	uint32_t triangleNum = 0;
 
 
-	double3* _moveDir;
+	double3* _moveDir = nullptr;
 	lbvh_f bvh_f;
 	lbvh_e bvh_e;
 
 	PCG_Data pcg_data;
 
-	int4* _collisonPairs;
-	int4* _ccd_collisonPairs;
-	uint32_t* _cpNum;
-	int* _MatIndex;
-	uint32_t* _close_cpNum;
+	gpuipc::DeviceBuffer<int4> _collisonPairs;
+	gpuipc::DeviceBuffer<int4> _ccd_collisonPairs;
+	gpuipc::DeviceBuffer<uint32_t> _cpNum;
+	gpuipc::DeviceBuffer<int> _MatIndex;
+	gpuipc::DeviceBuffer<uint32_t> _close_cpNum;
 
-	uint32_t* _environment_collisionPair;
+	gpuipc::DeviceBuffer<uint32_t> _environment_collisionPair;
 
-	uint32_t* _closeConstraintID;
-	double* _closeConstraintVal;
+	gpuipc::DeviceBuffer<uint32_t> _closeConstraintID;
+	gpuipc::DeviceBuffer<double> _closeConstraintVal;
 
-	int4* _closeMConstraintID;
-	double* _closeMConstraintVal;
+	gpuipc::DeviceBuffer<int4> _closeMConstraintID;
+	gpuipc::DeviceBuffer<double> _closeMConstraintVal;
 
-	uint32_t* _gpNum;
-	uint32_t* _close_gpNum;
+	gpuipc::DeviceBuffer<uint32_t> _gpNum;
+	gpuipc::DeviceBuffer<uint32_t> _close_gpNum;
+	gpuipc::DeviceBuffer<int> _scalar_scratch;
+	gpuipc::DeviceBuffer<double2> _distance_scratch;
+	cudaEvent_t _frame_timing_events[2] = {};
+	cudaEvent_t _newton_timing_events[6] = {};
 	//uint32_t* _cpNum;
-	uint32_t h_cpNum[5];
-	uint32_t h_ccd_cpNum;
-	uint32_t h_gpNum;
+	uint32_t h_cpNum[5] = {0, 0, 0, 0, 0};
+	uint32_t h_ccd_cpNum = 0;
+	uint32_t h_gpNum = 0;
 	
-	uint32_t h_close_cpNum;
-	uint32_t h_close_gpNum;
+	uint32_t h_close_cpNum = 0;
+	uint32_t h_close_gpNum = 0;
 
 	double Kappa;
 	double dHat;
@@ -72,32 +77,32 @@ public:
 	double Step;
 	double meanMass;
 	double meanVolumn;
-	double3* _groundNormal;
-	double* _groundOffset;
+	gpuipc::DeviceBuffer<double3> _groundNormal;
+	gpuipc::DeviceBuffer<double> _groundOffset;
 
 	// for friction
-	double* lambda_lastH_scalar;
-	double2* distCoord;
-	__GEIGEN__::Matrix3x2d* tanBasis;
-	int4* _collisonPairs_lastH;
+	gpuipc::DeviceBuffer<double> lambda_lastH_scalar;
+	gpuipc::DeviceBuffer<double2> distCoord;
+	gpuipc::DeviceBuffer<__GEIGEN__::Matrix3x2d> tanBasis;
+	gpuipc::DeviceBuffer<int4> _collisonPairs_lastH;
 	uint32_t h_cpNum_last[5];
-	int* _MatIndex_last;
+	gpuipc::DeviceBuffer<int> _MatIndex_last;
 
-	double* lambda_lastH_scalar_gd;
-	uint32_t* _collisonPairs_lastH_gd;
-	uint32_t h_gpNum_last;
+	gpuipc::DeviceBuffer<double> lambda_lastH_scalar_gd;
+	gpuipc::DeviceBuffer<uint32_t> _collisonPairs_lastH_gd;
+	uint32_t h_gpNum_last = 0;
 
-	uint32_t vertexNum;
-	uint32_t surf_vertexNum;
-	uint32_t edge_Num;
-	uint32_t tri_edge_num;
-	uint32_t surface_Num;
-	uint32_t tetrahedraNum;
+	uint32_t vertexNum = 0;
+	uint32_t surf_vertexNum = 0;
+	uint32_t edge_Num = 0;
+	uint32_t tri_edge_num = 0;
+	uint32_t surface_Num = 0;
+	uint32_t tetrahedraNum = 0;
 
 	BHessian BH;
 	AABB SceneSize;
-	int MAX_COLLITION_PAIRS_NUM;
-	int MAX_CCD_COLLITION_PAIRS_NUM;
+	int MAX_COLLITION_PAIRS_NUM = 0;
+	int MAX_CCD_COLLITION_PAIRS_NUM = 0;
 
 	//double RestNHEnergy;
 	double animation_subRate;
@@ -132,6 +137,9 @@ public:
 
 	void tempMalloc_closeConstraint();
 	void tempFree_closeConstraint();
+	void resizeFrictionBuffers();
+	void ensureTimingEvents();
+	void releaseTimingEvents();
 
 	void FREE_DEVICE_MEM();
 	void initBVH(int* _btype);

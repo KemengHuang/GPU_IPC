@@ -3,14 +3,17 @@
 # =============================================================================
 
 # Minimum required CMake version
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.24)
 
 # Set policy to avoid compiler ID conflicts
 cmake_policy(SET CMP0069 NEW)
 
 # Project settings
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose Release or Debug")
-set(CUDA_ARCHITECTURES 86)  # SM86 for Ampere architecture (RTX 30xx series)
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING
+        "CUDA architectures (for example: native, 86, 89, or 120)")
+endif()
 
 # Initialize project with C++ and CUDA languages
 project(gpu_ipc LANGUAGES CXX CUDA)
@@ -54,7 +57,7 @@ set_target_properties(gipc PROPERTIES
     CUDA_EXTENSIONS OFF                    # Disable CUDA compiler extensions
     CUDA_SEPARABLE_COMPILATION ON          # Enable separate compilation
     CUDA_RESOLVE_DEVICE_SYMBOLS ON         # Resolve device symbols at link time
-    CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES} # Target CUDA architecture
+    CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES} # Target CUDA architecture
 )
 
 # =============================================================================
@@ -144,7 +147,9 @@ target_compile_options(gipc PRIVATE
 if(MSVC)
     target_compile_options(gipc PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>
+        $<$<COMPILE_LANGUAGE:CXX>:/utf-8>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
+        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>
     )
 endif()
 
@@ -163,8 +168,10 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${GIPC_HEADER})
 # Display configuration information
 message(STATUS "Project: gpu_ipc")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "CUDA architectures: ${CUDA_ARCHITECTURES}")
+message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "CUDA standard: ${CMAKE_CUDA_STANDARD}")
-message(STATUS "Source files found: ${GIPC_SOURCE}")
-message(STATUS "Header files found: ${GIPC_HEADER}")
+list(LENGTH GIPC_SOURCE GIPC_SOURCE_COUNT)
+list(LENGTH GIPC_HEADER GIPC_HEADER_COUNT)
+message(STATUS "Source files: ${GIPC_SOURCE_COUNT}")
+message(STATUS "Header files: ${GIPC_HEADER_COUNT}")

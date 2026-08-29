@@ -12,11 +12,13 @@
 #include "fem_parameters.h"
 #include "ACCD.cuh"
 #include "femEnergy.cuh"
-#include <thrust/sort.h>
-#include <thrust/sequence.h>
-#include <thrust/device_ptr.h>
+#include "cuda_cub_wrappers.h"
 #include "FrictionUtils.cuh"
+#include <algorithm>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
+#include <limits>
 #include "Eigen/Eigen"
 #include "device_utils.h"
 using namespace Eigen;
@@ -25,6 +27,13 @@ using namespace Eigen;
 #define NEWF
 #define MAKEPD2
 #define OLDBARRIER2
+
+__global__ void fill_sort_indices(uint32_t* indices, int number)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i < number)
+        indices[i] = static_cast<uint32_t>(i);
+}
 template <class F>
 __device__ __host__ inline F __m_min(F a, F b)
 {
@@ -125,10 +134,15 @@ __device__ __forceinline__ void __blockReduce(double temp, double* tep, double* 
     {
         warpNum = ((blockDim.x) >> 5);
     }
+    const int warp_begin = idof + warpId * warpSize;
+    const int valid_lanes = min(warpSize, max(number - warp_begin, 0));
+    const unsigned int warp_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double other = gipc::WARP_SHFL_DOWN(temp, i);
-        temp         = combine(temp, other);
+        const double other = gipc::WARP_SHFL_DOWN(temp, i, warp_mask);
+        if(warpTid + i < valid_lanes)
+            temp = combine(temp, other);
     }
     if(warpTid == 0)
     {
@@ -140,10 +154,14 @@ __device__ __forceinline__ void __blockReduce(double temp, double* tep, double* 
         if(warpNum > 1)
         {
             temp = tep[threadIdx.x];
+            const unsigned int aggregate_mask =
+                gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(warpNum));
             for(int i = 1; i < warpNum; i = (i << 1))
             {
-                double other = gipc::WARP_SHFL_DOWN(temp, i);
-                temp         = combine(temp, other);
+                const double other =
+                    gipc::WARP_SHFL_DOWN(temp, i, aggregate_mask);
+                if(threadIdx.x + i < warpNum)
+                    temp = combine(temp, other);
             }
         }
         if(threadIdx.x == 0)
@@ -185,12 +203,19 @@ __device__ __forceinline__ void __blockReduceMax2(double2 temp, double2* sdata, 
     {
         warpNum = ((blockDim.x) >> 5);
     }
+    const int warp_begin = idof + warpId * warpSize;
+    const int valid_lanes = min(warpSize, max(number - warp_begin, 0));
+    const unsigned int warp_mask =
+        gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     for(int i = 1; i < 32; i = (i << 1))
     {
-        double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
-        double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
-        temp.x         = __m_max(temp.x, tempMin);
-        temp.y         = __m_max(temp.y, tempMax);
+        const double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i, warp_mask);
+        const double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i, warp_mask);
+        if(warpTid + i < valid_lanes)
+        {
+            temp.x = __m_max(temp.x, tempMin);
+            temp.y = __m_max(temp.y, tempMax);
+        }
     }
     if(warpTid == 0)
     {
@@ -202,12 +227,19 @@ __device__ __forceinline__ void __blockReduceMax2(double2 temp, double2* sdata, 
         if(warpNum > 1)
         {
             temp = sdata[threadIdx.x];
+            const unsigned int aggregate_mask =
+                gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(warpNum));
             for(int i = 1; i < warpNum; i = (i << 1))
             {
-                double tempMin = gipc::WARP_SHFL_DOWN(temp.x, i);
-                double tempMax = gipc::WARP_SHFL_DOWN(temp.y, i);
-                temp.x         = __m_max(temp.x, tempMin);
-                temp.y         = __m_max(temp.y, tempMax);
+                const double tempMin =
+                    gipc::WARP_SHFL_DOWN(temp.x, i, aggregate_mask);
+                const double tempMax =
+                    gipc::WARP_SHFL_DOWN(temp.y, i, aggregate_mask);
+                if(threadIdx.x + i < warpNum)
+                {
+                    temp.x = __m_max(temp.x, tempMin);
+                    temp.y = __m_max(temp.y, tempMax);
+                }
             }
         }
         if(threadIdx.x == 0)
@@ -943,11 +975,6 @@ __device__ double _computeInjectiveStepSize_3d(const double3*  verts,
     z3 = verts[v2].z;
     z4 = verts[v3].z;
 
-    int _3Fii0 = v0 * 3;
-    int _3Fii1 = v1 * 3;
-    int _3Fii2 = v2 * 3;
-    int _3Fii3 = v3 * 3;
-
     p1 = -mv[v0].x;
     p2 = -mv[v1].x;
     p3 = -mv[v2].x;
@@ -1632,7 +1659,7 @@ __global__ void _calFrictionHessian(const double3* _vertexes,
 
 __global__ void _calBarrierGradientAndHessian(const double3*    _vertexes,
                                               const double3*    _rest_vertexes,
-                                              const const int4* _collisionPair,
+                                              const int4* _collisionPair,
                                               double3*          _gradient,
                                               __GEIGEN__::Matrix12x12d* H12x12,
                                               __GEIGEN__::Matrix9x9d*   H9x9,
@@ -3597,7 +3624,7 @@ __global__ void _reduct_MSelfDist(const double3* _vertexes,
 __global__ void _calFrictionGradient_gd(const double3*        _vertexes,
                                         const double3*        _o_vertexes,
                                         const double3*        _normal,
-                                        const const uint32_t* _last_collisionPair_gd,
+                                        const uint32_t* _last_collisionPair_gd,
                                         double3*              _gradient,
                                         int                   number,
                                         double                dt,
@@ -3636,7 +3663,7 @@ __global__ void _calFrictionGradient_gd(const double3*        _vertexes,
 
 __global__ void _calFrictionGradient(const double3*    _vertexes,
                                      const double3*    _o_vertexes,
-                                     const const int4* _last_collisionPair,
+                                     const int4* _last_collisionPair,
                                      double3*          _gradient,
                                      int               number,
                                      double            dt,
@@ -3820,7 +3847,7 @@ __global__ void _calFrictionGradient(const double3*    _vertexes,
 
 __global__ void _calBarrierGradient(const double3*    _vertexes,
                                     const double3*    _rest_vertexes,
-                                    const const int4* _collisionPair,
+                                    const int4* _collisionPair,
                                     double3*          _gradient,
                                     double            dHat,
                                     double            Kappa,
@@ -5710,7 +5737,6 @@ __global__ void _updateBoundaryMoveDir(double3* _vertexes,
     if(idx >= numbers)
         return;
 
-    double                 massSum = 0;
     double                 angleX  = PI / 2.5 * ipc_dt * alpha;
     __GEIGEN__::Matrix3x3d rotationL, rotationR;
     __GEIGEN__::__set_Mat_val(
@@ -5912,13 +5938,17 @@ __global__ void _edgeTriIntersectionQuery(const int*     _btype,
                                           const Node*    _edge_nodes,
                                           int*           _isIntesect,
                                           double         dHat,
+                                          int            edge_count,
                                           int            number)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= number)
         return;
 
-    uint32_t  stack[64];
+    if(edge_count <= 0)
+        return;
+
+    uint32_t  stack[65];
     uint32_t* stack_ptr = stack;
     *stack_ptr++        = 0;
 
@@ -5939,8 +5969,25 @@ __global__ void _edgeTriIntersectionQuery(const int*     _btype,
     //double bboxDiagSize2 = __GEIGEN__::__squaredNorm(__GEIGEN__::__minus(_edge_bvs[0].upper, _edge_bvs[0].lower));
     //printf("%f\n", bboxDiagSize2);
     double gapl = 0;  //sqrt(dHat);
+    const auto root_object = _edge_nodes[0].element_idx;
+    if(root_object != 0xFFFFFFFF)
+    {
+        if(_overlap(_bv, _edge_bvs[0], gapl)
+           && !(face.x == _edges[root_object].x || face.x == _edges[root_object].y
+                || face.y == _edges[root_object].x || face.y == _edges[root_object].y
+                || face.z == _edges[root_object].x || face.z == _edges[root_object].y)
+           && !(_btype[face.x] >= 2 && _btype[face.y] >= 2 && _btype[face.z] >= 2
+                && _btype[_edges[root_object].x] >= 2
+                && _btype[_edges[root_object].y] >= 2)
+           && segTriIntersect(_vertexes[_edges[root_object].x],
+                              _vertexes[_edges[root_object].y],
+                              _vertexes[face.x],
+                              _vertexes[face.y],
+                              _vertexes[face.z]))
+            *_isIntesect = -1;
+        return;
+    }
     //double dHat = gapl * gapl;// *bboxDiagSize2;
-    unsigned int num_found = 0;
     do
     {
         const uint32_t node_id = *--stack_ptr;
@@ -6023,7 +6070,7 @@ __global__ void _edgeTriIntersectionQuery(const int*     _btype,
 __global__ void _calFrictionLastH_gd(const double3*        _vertexes,
                                      const double*         g_offset,
                                      const double3*        g_normal,
-                                     const const uint32_t* _collisionPair_environment,
+                                     const uint32_t* _collisionPair_environment,
                                      double*               lambda_lastH_gd,
                                      uint32_t* _collisionPair_last_gd,
                                      double    dHat,
@@ -6047,7 +6094,7 @@ __global__ void _calFrictionLastH_gd(const double3*        _vertexes,
 }
 
 __global__ void _calFrictionLastH_DistAndTan(const double3*    _vertexes,
-                                             const const int4* _collisionPair,
+                                             const int4* _collisionPair,
                                              double*           lambda_lastH,
                                              double2*          distCoord,
                                              __GEIGEN__::Matrix3x2d* tanBasis,
@@ -6162,23 +6209,61 @@ __global__ void _calFrictionLastH_DistAndTan(const double3*    _vertexes,
 /// <summary>
 ///  host code
 /// </summary>
+void GIPC::ensureTimingEvents()
+{
+    for(cudaEvent_t& event : _frame_timing_events)
+        if(!event)
+            CUDA_SAFE_CALL(cudaEventCreate(&event));
+    for(cudaEvent_t& event : _newton_timing_events)
+        if(!event)
+            CUDA_SAFE_CALL(cudaEventCreate(&event));
+}
+
+void GIPC::releaseTimingEvents()
+{
+    for(cudaEvent_t& event : _frame_timing_events)
+    {
+        if(event)
+            CUDA_SAFE_CALL(cudaEventDestroy(event));
+        event = nullptr;
+    }
+    for(cudaEvent_t& event : _newton_timing_events)
+    {
+        if(event)
+            CUDA_SAFE_CALL(cudaEventDestroy(event));
+        event = nullptr;
+    }
+}
+
 void GIPC::FREE_DEVICE_MEM()
 {
-    CUDA_SAFE_CALL(cudaFree(_MatIndex));
-    CUDA_SAFE_CALL(cudaFree(_collisonPairs));
-    CUDA_SAFE_CALL(cudaFree(_ccd_collisonPairs));
-    CUDA_SAFE_CALL(cudaFree(_cpNum));
-    CUDA_SAFE_CALL(cudaFree(_close_cpNum));
-    CUDA_SAFE_CALL(cudaFree(_close_gpNum));
-    CUDA_SAFE_CALL(cudaFree(_environment_collisionPair));
-    CUDA_SAFE_CALL(cudaFree(_gpNum));
-    //CUDA_SAFE_CALL(cudaFree(_moveDir));
-    CUDA_SAFE_CALL(cudaFree(_groundNormal));
-    CUDA_SAFE_CALL(cudaFree(_groundOffset));
-
-    CUDA_SAFE_CALL(cudaFree(_faces));
-    CUDA_SAFE_CALL(cudaFree(_edges));
-    CUDA_SAFE_CALL(cudaFree(_surfVerts));
+    releaseTimingEvents();
+    _MatIndex.release();
+    _collisonPairs.release();
+    _ccd_collisonPairs.release();
+    _cpNum.release();
+    _close_cpNum.release();
+    _close_gpNum.release();
+    _closeConstraintID.release();
+    _closeConstraintVal.release();
+    _closeMConstraintID.release();
+    _closeMConstraintVal.release();
+    _environment_collisionPair.release();
+    _gpNum.release();
+    _scalar_scratch.release();
+    _distance_scratch.release();
+    _groundNormal.release();
+    _groundOffset.release();
+    _faces.release();
+    _edges.release();
+    _surfVerts.release();
+    lambda_lastH_scalar.release();
+    distCoord.release();
+    tanBasis.release();
+    _collisonPairs_lastH.release();
+    _MatIndex_last.release();
+    lambda_lastH_scalar_gd.release();
+    _collisonPairs_lastH_gd.release();
 
     pcg_data.FREE_DEVICE_MEM();
 
@@ -6189,18 +6274,16 @@ void GIPC::FREE_DEVICE_MEM()
 
 void GIPC::MALLOC_DEVICE_MEM()
 {
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_MatIndex, MAX_COLLITION_PAIRS_NUM * sizeof(int)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_collisonPairs,
-                              MAX_COLLITION_PAIRS_NUM * sizeof(int4)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_ccd_collisonPairs,
-                              MAX_CCD_COLLITION_PAIRS_NUM * sizeof(int4)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_environment_collisionPair,
-                              surf_vertexNum * sizeof(int)));
-    //CUDA_SAFE_CALL(cudaMalloc((void**)&_moveDir, vertexNum * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_cpNum, 5 * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_gpNum, sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_groundNormal, 5 * sizeof(double3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_groundOffset, 5 * sizeof(double)));
+    constexpr size_t dcd_capacity = 100'000;
+    constexpr size_t ccd_capacity = 1'000'000;
+    _MatIndex.reserve(dcd_capacity);
+    _collisonPairs.reserve(dcd_capacity);
+    _ccd_collisonPairs.reserve(ccd_capacity);
+    _environment_collisionPair.resize(surf_vertexNum);
+    _cpNum.resize(5);
+    _gpNum.resize(1);
+    _groundNormal.resize(5);
+    _groundOffset.resize(5);
     double  h_offset[5] = {-1, -1, 1, -1, 1};
     double3 H_normal[5];  // = { make_double3(0, 1, 0);
     H_normal[0] = make_double3(0, 1, 0);
@@ -6212,12 +6295,11 @@ void GIPC::MALLOC_DEVICE_MEM()
     CUDA_SAFE_CALL(cudaMemcpy(_groundNormal, &H_normal, 5 * sizeof(double3), cudaMemcpyHostToDevice));
 
 
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_faces, surface_Num * sizeof(uint3)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_edges, edge_Num * sizeof(uint2)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_surfVerts, surf_vertexNum * sizeof(uint32_t)));
-
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_close_cpNum, sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_close_gpNum, sizeof(uint32_t)));
+    _faces.resize(surface_Num);
+    _edges.resize(edge_Num);
+    _surfVerts.resize(surf_vertexNum);
+    _close_cpNum.resize(1);
+    _close_gpNum.resize(1);
 
     CUDA_SAFE_CALL(cudaMemset(_close_cpNum, 0, sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMemset(_close_gpNum, 0, sizeof(uint32_t)));
@@ -6233,13 +6315,9 @@ void GIPC::initBVH(int* _btype)
                _vertexes,
                _rest_vertexes,
                _edges,
-               _collisonPairs,
-               _ccd_collisonPairs,
-               _cpNum,
-               _MatIndex,
                edge_Num,
                surf_vertexNum);
-    bvh_f.init(_btype, _vertexes, _faces, _surfVerts, _collisonPairs, _ccd_collisonPairs, _cpNum, _MatIndex, surface_Num, surf_vertexNum);
+    bvh_f.init(_btype, _vertexes, _faces, _surfVerts, surface_Num, surf_vertexNum);
 }
 
 void GIPC::init(double m_meanMass, double m_meanVolumn)
@@ -6393,14 +6471,13 @@ bool GIPC::checkCloseGroundVal()
         return false;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
-    int*               _isChange;
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_isChange, sizeof(int)));
-    CUDA_SAFE_CALL(cudaMemset(_isChange, 0, sizeof(int)));
+    _scalar_scratch.resize_discard(1);
+    CUDA_SAFE_CALL(cudaMemset(_scalar_scratch.data(), 0, sizeof(int)));
     _checkGroundCloseVal<<<blockNum, threadNum>>>(
-        _vertexes, _groundOffset, _groundNormal, _isChange, _closeConstraintID, _closeConstraintVal, numbers);
+        _vertexes, _groundOffset, _groundNormal, _scalar_scratch.data(), _closeConstraintID, _closeConstraintVal, numbers);
     int isChange;
-    CUDA_SAFE_CALL(cudaMemcpy(&isChange, _isChange, sizeof(int), cudaMemcpyDeviceToHost));
-    CUDA_SAFE_CALL(cudaFree(_isChange));
+    CUDA_SAFE_CALL(cudaMemcpy(
+        &isChange, _scalar_scratch.data(), sizeof(int), cudaMemcpyDeviceToHost));
 
     return (isChange == 1);
 }
@@ -6415,50 +6492,17 @@ bool GIPC::checkCloseGroundVal()
 
 static double __reducePartialsToScalar_Sum(double* queue, int numbers)
 {
-    const unsigned int threadNum   = default_threads;
-    unsigned int       sharedMsize = sizeof(double) * (threadNum >> 5);
-    int                blockNum    = (numbers + threadNum - 1) / threadNum;
-    while(numbers > 1)
-    {
-        __add_reduction<<<blockNum, threadNum, sharedMsize>>>(queue, numbers);
-        numbers  = blockNum;
-        blockNum = (numbers + threadNum - 1) / threadNum;
-    }
-    double result;
-    cudaMemcpy(&result, queue, sizeof(double), cudaMemcpyDeviceToHost);
-    return result;
+    return gpuipc::DeviceReduce().sum(queue, numbers);
 }
 
 static double __reducePartialsToScalar_Max(double* queue, int numbers)
 {
-    const unsigned int threadNum   = default_threads;
-    unsigned int       sharedMsize = sizeof(double) * (threadNum >> 5);
-    int                blockNum    = (numbers + threadNum - 1) / threadNum;
-    while(numbers > 1)
-    {
-        _reduct_max_double<<<blockNum, threadNum, sharedMsize>>>(queue, numbers);
-        numbers  = blockNum;
-        blockNum = (numbers + threadNum - 1) / threadNum;
-    }
-    double result;
-    cudaMemcpy(&result, queue, sizeof(double), cudaMemcpyDeviceToHost);
-    return result;
+    return gpuipc::DeviceReduce().max(queue, numbers);
 }
 
 static double2 __reducePartialsToScalar_Max2(double2* queue, int numbers)
 {
-    const unsigned int threadNum   = default_threads;
-    unsigned int       sharedMsize = sizeof(double2) * (threadNum >> 5);
-    int                blockNum    = (numbers + threadNum - 1) / threadNum;
-    while(numbers > 1)
-    {
-        _reduct_M_double2<<<blockNum, threadNum, sharedMsize>>>(queue, numbers);
-        numbers  = blockNum;
-        blockNum = (numbers + threadNum - 1) / threadNum;
-    }
-    double2 result;
-    cudaMemcpy(&result, queue, sizeof(double2), cudaMemcpyDeviceToHost);
-    return result;
+    return gpuipc::DeviceReduce().component_max(queue, numbers);
 }
 
 double2 GIPC::minMaxGroundDist()
@@ -6473,15 +6517,14 @@ double2 GIPC::minMaxGroundDist()
 
     unsigned int sharedMsize = sizeof(double2) * (threadNum >> 5);
 
-    double2* _queue;
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_queue, numbers * sizeof(double2)));
+    _distance_scratch.resize_discard(numbers);
     //CUDA_SAFE_CALL(cudaMemcpy(_tempMinMovement, _moveDir, number * sizeof(AABB), cudaMemcpyDeviceToDevice));
     _reduct_MGroundDist<<<blockNum, threadNum, sharedMsize>>>(
-        _vertexes, _groundOffset, _groundNormal, _environment_collisionPair, _queue, numbers);
+        _vertexes, _groundOffset, _groundNormal, _environment_collisionPair, _distance_scratch.data(), numbers);
     //_reduct_min_double3_to_double << <blockNum, threadNum, sharedMsize >> > (_moveDir, _tempMinMovement, numbers);
 
-    double2 minMaxValue = __reducePartialsToScalar_Max2(_queue, blockNum);
-    CUDA_SAFE_CALL(cudaFree(_queue));
+    double2 minMaxValue =
+        __reducePartialsToScalar_Max2(_distance_scratch.data(), blockNum);
     minMaxValue.x = 1.0 / minMaxValue.x;
     return minMaxValue;
 }
@@ -6648,33 +6691,108 @@ double GIPC::InjectiveStepSize(double slackness, double errorRate, double* mqueu
 
 void GIPC::buildCP()
 {
+    for(;;)
+    {
+        const size_t common_capacity = std::min({_collisonPairs.capacity(),
+                                                 _ccd_collisonPairs.capacity(),
+                                                 _MatIndex.capacity()});
+        if(common_capacity == 0
+           || common_capacity > std::numeric_limits<uint32_t>::max())
+        {
+            std::cerr << "Invalid DCD pair capacity: " << common_capacity << std::endl;
+            std::abort();
+        }
+        const uint32_t pair_capacity = static_cast<uint32_t>(common_capacity);
 
-    CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, 5 * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMemset(_gpNum, 0, sizeof(uint32_t)));
-    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    //bvh_f.Construct();
-    bvh_f.SelfCollitionDetect(dHat);
-    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    //bvh_e.Construct();
-    bvh_e.SelfCollitionDetect(dHat);
-    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    GroundCollisionDetect();
-    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    CUDA_SAFE_CALL(cudaMemcpy(&h_cpNum, _cpNum, 5 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
-    CUDA_SAFE_CALL(cudaMemcpy(&h_gpNum, _gpNum, sizeof(uint32_t), cudaMemcpyDeviceToHost));
-    /*CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, 5 * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMemset(_gpNum, 0, sizeof(uint32_t)));*/
+        _collisonPairs.resize(_collisonPairs.capacity());
+        _ccd_collisonPairs.resize(_ccd_collisonPairs.capacity());
+        _MatIndex.resize(_MatIndex.capacity());
+
+        CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, 5 * sizeof(uint32_t)));
+        CUDA_SAFE_CALL(cudaMemset(_gpNum, 0, sizeof(uint32_t)));
+        bvh_f.SelfCollitionDetect(dHat,
+                                  _collisonPairs.data(),
+                                  _ccd_collisonPairs.data(),
+                                  _cpNum.data(),
+                                  _MatIndex.data(),
+                                  pair_capacity);
+        bvh_e.SelfCollitionDetect(dHat,
+                                  _collisonPairs.data(),
+                                  _ccd_collisonPairs.data(),
+                                  _cpNum.data(),
+                                  _MatIndex.data(),
+                                  pair_capacity);
+        GroundCollisionDetect();
+        CUDA_SAFE_CALL(cudaMemcpy(
+            &h_cpNum, _cpNum.data(), 5 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
+        CUDA_SAFE_CALL(cudaMemcpy(
+            &h_gpNum, _gpNum.data(), sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+        if(h_cpNum[0] <= pair_capacity)
+        {
+            const uint64_t typed_count = static_cast<uint64_t>(h_cpNum[2])
+                                         + static_cast<uint64_t>(h_cpNum[3])
+                                         + static_cast<uint64_t>(h_cpNum[4]);
+            if(typed_count != h_cpNum[0])
+            {
+                std::cerr << "Collision subtype count mismatch: total=" << h_cpNum[0]
+                          << ", typed=" << typed_count << std::endl;
+                std::abort();
+            }
+            _collisonPairs.resize(h_cpNum[0]);
+            _ccd_collisonPairs.resize(h_cpNum[0]);
+            _MatIndex.resize(h_cpNum[0]);
+            pcg_data.MP.updateCollisionPairs(_collisonPairs.data());
+            break;
+        }
+
+        std::cout << "Growing DCD pair capacity from " << pair_capacity << " for "
+                  << h_cpNum[0] << " detected pairs." << std::endl;
+        _collisonPairs.resize_discard(h_cpNum[0]);
+        _ccd_collisonPairs.resize_discard(h_cpNum[0]);
+        _MatIndex.resize_discard(h_cpNum[0]);
+    }
 }
 
 void GIPC::buildFullCP(const double& alpha)
 {
+    for(;;)
+    {
+        const size_t capacity = _ccd_collisonPairs.capacity();
+        if(capacity == 0 || capacity > std::numeric_limits<uint32_t>::max())
+        {
+            std::cerr << "Invalid CCD pair capacity: " << capacity << std::endl;
+            std::abort();
+        }
+        const uint32_t pair_capacity = static_cast<uint32_t>(capacity);
+        _ccd_collisonPairs.resize(capacity);
 
-    CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, sizeof(uint32_t)));
+        CUDA_SAFE_CALL(cudaMemset(_cpNum, 0, sizeof(uint32_t)));
+        bvh_f.SelfCollitionFullDetect(dHat,
+                                      _moveDir,
+                                      alpha,
+                                      _ccd_collisonPairs.data(),
+                                      _cpNum.data(),
+                                      pair_capacity);
+        bvh_e.SelfCollitionFullDetect(dHat,
+                                      _moveDir,
+                                      alpha,
+                                      _ccd_collisonPairs.data(),
+                                      _cpNum.data(),
+                                      pair_capacity);
+        CUDA_SAFE_CALL(cudaMemcpy(
+            &h_ccd_cpNum, _cpNum.data(), sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
-    bvh_f.SelfCollitionFullDetect(dHat, _moveDir, alpha);
-    bvh_e.SelfCollitionFullDetect(dHat, _moveDir, alpha);
+        if(h_ccd_cpNum <= pair_capacity)
+        {
+            _ccd_collisonPairs.resize(h_ccd_cpNum);
+            break;
+        }
 
-    CUDA_SAFE_CALL(cudaMemcpy(&h_ccd_cpNum, _cpNum, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+        std::cout << "Growing CCD pair capacity from " << pair_capacity << " for "
+                  << h_ccd_cpNum << " detected pairs." << std::endl;
+        _ccd_collisonPairs.resize_discard(h_ccd_cpNum);
+    }
 }
 
 
@@ -6790,14 +6908,13 @@ bool GIPC::checkSelfCloseVal()
         return false;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
-    int*               _isChange;
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_isChange, sizeof(int)));
-    CUDA_SAFE_CALL(cudaMemset(_isChange, 0, sizeof(int)));
+    _scalar_scratch.resize_discard(1);
+    CUDA_SAFE_CALL(cudaMemset(_scalar_scratch.data(), 0, sizeof(int)));
     _checkSelfCloseVal<<<blockNum, threadNum>>>(
-        _vertexes, _isChange, _closeMConstraintID, _closeMConstraintVal, numbers);
+        _vertexes, _scalar_scratch.data(), _closeMConstraintID, _closeMConstraintVal, numbers);
     int isChange;
-    CUDA_SAFE_CALL(cudaMemcpy(&isChange, _isChange, sizeof(int), cudaMemcpyDeviceToHost));
-    CUDA_SAFE_CALL(cudaFree(_isChange));
+    CUDA_SAFE_CALL(cudaMemcpy(
+        &isChange, _scalar_scratch.data(), sizeof(int), cudaMemcpyDeviceToHost));
 
     return (isChange == 1);
 }
@@ -6812,15 +6929,13 @@ double2 GIPC::minMaxSelfDist()
 
     unsigned int sharedMsize = sizeof(double2) * (threadNum >> 5);
 
-    double2* _queue;
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_queue, numbers * sizeof(double2)));
+    _distance_scratch.resize_discard(numbers);
     //CUDA_SAFE_CALL(cudaMemcpy(_tempMinMovement, _moveDir, number * sizeof(AABB), cudaMemcpyDeviceToDevice));
     _reduct_MSelfDist<<<blockNum, threadNum, sharedMsize>>>(
-        _vertexes, _collisonPairs, _queue, numbers);
+        _vertexes, _collisonPairs, _distance_scratch.data(), numbers);
     //_reduct_min_double3_to_double << <blockNum, threadNum, sharedMsize >> > (_moveDir, _tempMinMovement, numbers);
 
-    double2 minValue = __reducePartialsToScalar_Max2(_queue, blockNum);
-    CUDA_SAFE_CALL(cudaFree(_queue));
+    double2 minValue = __reducePartialsToScalar_Max2(_distance_scratch.data(), blockNum);
     minValue.x = 1.0 / minValue.x;
     return minValue;
 }
@@ -7083,9 +7198,7 @@ void updateNeighborInfo(unsigned int*   _neighborList,
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
     _updateNeighborNum<<<blockNum, threadNum>>>(_neighborNumInit, _neighborNum, sortIndex, numbers);
-    thrust::exclusive_scan(thrust::device_ptr<unsigned int>(_neighborNum),
-                           thrust::device_ptr<unsigned int>(_neighborNum) + numbers,
-                           thrust::device_ptr<unsigned int>(_neighborStartTemp));
+    gpuipc::DeviceScan().exclusive_sum(_neighborNum, _neighborStartTemp, numbers);
     _updateNeighborList<<<blockNum, threadNum>>>(d_neighborListInit,
                                                  _neighborList,
                                                  _neighborNum,
@@ -7109,7 +7222,7 @@ void updateNeighborInfo(unsigned int*   _neighborList,
 void calcTetMChash(uint64_t*         _MChash,
                    const double3*    _vertexes,
                    uint4*            tets,
-                   const const AABB* _MaxBv,
+                   const AABB* _MaxBv,
                    const uint32_t*   sortMapVertIndex,
                    int               number)
 {
@@ -7189,11 +7302,15 @@ void sortGeometry(device_TetraData& TetMesh,
                   const int&        triangle_num)
 {
     calcVertMChash(TetMesh.MChash, TetMesh.vertexes, _MaxBv, vertex_num);
-    thrust::sequence(thrust::device_ptr<uint32_t>(TetMesh.sortIndex),
-                     thrust::device_ptr<uint32_t>(TetMesh.sortIndex) + vertex_num);
-    thrust::sort_by_key(thrust::device_ptr<uint64_t>(TetMesh.MChash),
-                        thrust::device_ptr<uint64_t>(TetMesh.MChash) + vertex_num,
-                        thrust::device_ptr<uint32_t>(TetMesh.sortIndex));
+    fill_sort_indices<<<(vertex_num + 255) / 256, 256>>>(TetMesh.sortIndex.data(), vertex_num);
+    GPUIPC_CHECK_CUDA(cudaGetLastError());
+    gpuipc::DeviceRadixSort().sort_pairs(TetMesh.MChash.data(),
+                                         TetMesh.sortMChash.data(),
+                                         TetMesh.sortIndex.data(),
+                                         TetMesh.sortIndexOutput.data(),
+                                         vertex_num);
+    std::swap(TetMesh.MChash, TetMesh.sortMChash);
+    std::swap(TetMesh.sortIndex, TetMesh.sortIndexOutput);
     updateVertexes(TetMesh.o_vertexes,
                    TetMesh.vertexes,
                    TetMesh.tempDouble,
@@ -7583,6 +7700,9 @@ int GIPC::calculateMovingDirection(device_TetraData& TetMesh, int cpNum, int pre
 
         return cgCount;
     }
+
+    std::cerr << "Unsupported preconditioner type: " << preconditioner_type << std::endl;
+    std::abort();
 }
 
 
@@ -7592,24 +7712,33 @@ bool edgeTriIntersectionQuery(const int*     _btype,
                               const uint3*   _faces,
                               const AABB*    _edge_bvs,
                               const Node*    _edge_nodes,
+                              int*           is_intersect,
                               double         dHat,
+                              int            edge_count,
                               int            number)
 {
     int                numbers   = number;
-    if(numbers < 1)
+    if(numbers < 1 || edge_count < 1)
         return false;
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;
-    int*               _isIntersect;
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_isIntersect, sizeof(int)));
-    CUDA_SAFE_CALL(cudaMemset(_isIntersect, 0, sizeof(int)));
+    CUDA_SAFE_CALL(cudaMemset(is_intersect, 0, sizeof(int)));
 
     _edgeTriIntersectionQuery<<<blockNum, threadNum>>>(
-        _btype, _vertexes, _edges, _faces, _edge_bvs, _edge_nodes, _isIntersect, dHat, numbers);
+        _btype,
+        _vertexes,
+        _edges,
+        _faces,
+        _edge_bvs,
+        _edge_nodes,
+        is_intersect,
+        dHat,
+        edge_count,
+        numbers);
 
     int h_isITST;
-    cudaMemcpy(&h_isITST, _isIntersect, sizeof(int), cudaMemcpyDeviceToHost);
-    CUDA_SAFE_CALL(cudaFree(_isIntersect));
+    CUDA_SAFE_CALL(
+        cudaMemcpy(&h_isITST, is_intersect, sizeof(int), cudaMemcpyDeviceToHost));
     if(h_isITST < 0)
     {
         return true;
@@ -7619,13 +7748,16 @@ bool edgeTriIntersectionQuery(const int*     _btype,
 
 bool GIPC::checkEdgeTriIntersectionIfAny(device_TetraData& TetMesh)
 {
+    _scalar_scratch.resize_discard(1);
     return edgeTriIntersectionQuery(bvh_e._btype,
                                     TetMesh.vertexes,
                                     bvh_e._edges,
                                     bvh_f._faces,
                                     bvh_e._bvs,
                                     bvh_e._nodes,
+                                    _scalar_scratch.data(),
                                     dHat,
+                                    bvh_e.edge_number,
                                     bvh_f.face_number);
 }
 
@@ -7637,15 +7769,14 @@ bool GIPC::checkGroundIntersection()
     const unsigned int threadNum = default_threads;
     int                blockNum  = (numbers + threadNum - 1) / threadNum;  //
 
-    int* _isIntersect;
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_isIntersect, sizeof(int)));
-    CUDA_SAFE_CALL(cudaMemset(_isIntersect, 0, sizeof(int)));
+    _scalar_scratch.resize_discard(1);
+    CUDA_SAFE_CALL(cudaMemset(_scalar_scratch.data(), 0, sizeof(int)));
     _checkGroundIntersection<<<blockNum, threadNum>>>(
-        _vertexes, _groundOffset, _groundNormal, _environment_collisionPair, _isIntersect, numbers);
+        _vertexes, _groundOffset, _groundNormal, _environment_collisionPair, _scalar_scratch.data(), numbers);
 
     int h_isITST;
-    cudaMemcpy(&h_isITST, _isIntersect, sizeof(int), cudaMemcpyDeviceToHost);
-    CUDA_SAFE_CALL(cudaFree(_isIntersect));
+    CUDA_SAFE_CALL(cudaMemcpy(
+        &h_isITST, _scalar_scratch.data(), sizeof(int), cudaMemcpyDeviceToHost));
     if(h_isITST < 0)
     {
         return true;
@@ -7686,12 +7817,9 @@ bool GIPC::lineSearch(device_TetraData& TetMesh, double& alpha, const double& cf
 
     stepForward(TetMesh.vertexes, TetMesh.temp_double3Mem, _moveDir, TetMesh.BoundaryType, alpha, false, vertexNum);
 
-    bool rehash = true;
-
     buildBVH();
     //buildCP();
     //if (h_cpNum[0] > 0) system("pause");
-    int numOfIntersect = 0;
     int insectNum      = 0;
 
     bool checkInterset = true;
@@ -7701,7 +7829,6 @@ bool GIPC::lineSearch(device_TetraData& TetMesh, double& alpha, const double& cf
         printf("type 0 intersection happened:  %d\n", insectNum);
         insectNum++;
         alpha /= 2.0;
-        numOfIntersect++;
         alpha = __m_min(cfl_alpha, alpha);
         stepForward(TetMesh.vertexes, TetMesh.temp_double3Mem, _moveDir, TetMesh.BoundaryType, alpha, false, vertexNum);
         buildBVH();
@@ -7742,7 +7869,6 @@ bool GIPC::lineSearch(device_TetraData& TetMesh, double& alpha, const double& cf
             printf("type 1 intersection happened:  %d\n", insectNum);
             insectNum++;
             alpha /= 2.0;
-            numOfIntersect++;
             alpha = __m_min(cfl_alpha, alpha);
             stepForward(TetMesh.vertexes,
                         TetMesh.temp_double3Mem,
@@ -7799,18 +7925,31 @@ void GIPC::postLineSearch(device_TetraData& TetMesh, double alpha)
 
 void GIPC::tempMalloc_closeConstraint()
 {
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_closeConstraintID, h_gpNum * sizeof(uint32_t)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_closeConstraintVal, h_gpNum * sizeof(double)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_closeMConstraintID, h_cpNum[0] * sizeof(int4)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_closeMConstraintVal, h_cpNum[0] * sizeof(double)));
+    _closeConstraintID.resize_discard(h_gpNum);
+    _closeConstraintVal.resize_discard(h_gpNum);
+    _closeMConstraintID.resize_discard(h_cpNum[0]);
+    _closeMConstraintVal.resize_discard(h_cpNum[0]);
 }
 
 void GIPC::tempFree_closeConstraint()
 {
-    CUDA_SAFE_CALL(cudaFree(_closeConstraintID));
-    CUDA_SAFE_CALL(cudaFree(_closeConstraintVal));
-    CUDA_SAFE_CALL(cudaFree(_closeMConstraintID));
-    CUDA_SAFE_CALL(cudaFree(_closeMConstraintVal));
+    _closeConstraintID.clear();
+    _closeConstraintVal.clear();
+    _closeMConstraintID.clear();
+    _closeMConstraintVal.clear();
+}
+
+void GIPC::resizeFrictionBuffers()
+{
+    const size_t self_count   = h_cpNum[0];
+    const size_t ground_count = h_gpNum;
+    lambda_lastH_scalar.resize_discard(self_count);
+    distCoord.resize_discard(self_count);
+    tanBasis.resize_discard(self_count);
+    _collisonPairs_lastH.resize_discard(self_count);
+    _MatIndex_last.resize_discard(self_count);
+    lambda_lastH_scalar_gd.resize_discard(ground_count);
+    _collisonPairs_lastH_gd.resize_discard(ground_count);
 }
 double maxCOllisionPairNum = 0;
 double totalCollisionPairs = 0;
@@ -7827,29 +7966,33 @@ int              GIPC::solve_subIP(device_TetraData& TetMesh,
                       double&           time4)
 {
     int iterCap = 10000, k = 0;
+    ensureTimingEvents();
+    cudaEvent_t start = _newton_timing_events[0];
+    cudaEvent_t end0  = _newton_timing_events[1];
+    cudaEvent_t end1  = _newton_timing_events[2];
+    cudaEvent_t end2  = _newton_timing_events[3];
+    cudaEvent_t end3  = _newton_timing_events[4];
+    cudaEvent_t end4  = _newton_timing_events[5];
 
     CUDA_SAFE_CALL(cudaMemset(_moveDir, 0, vertexNum * sizeof(double3)));
     //BH.MALLOC_DEVICE_MEM_O(tetrahedraNum, h_cpNum + 1, h_gpNum);
-    double totalTimeStep = 0;
     for(; k < iterCap; ++k)
     {
         totalCollisionPairs += h_cpNum[0];
         maxCOllisionPairNum =
             (maxCOllisionPairNum > h_cpNum[0]) ? maxCOllisionPairNum : h_cpNum[0];
-        cudaEvent_t start, end0, end1, end2, end3, end4;
-        cudaEventCreate(&start);
-        cudaEventCreate(&end0);
-        cudaEventCreate(&end1);
-        cudaEventCreate(&end2);
-        cudaEventCreate(&end3);
-        cudaEventCreate(&end4);
-
-
-        BH.updateDNum(triangleNum, tetrahedraNum, h_cpNum + 1, h_cpNum_last + 1, tri_edge_num);
+        BH.updateDNum(triangleNum,
+                      tetrahedraNum,
+                      h_cpNum + 1,
+                      h_cpNum_last + 1,
+                      tri_edge_num,
+                      h_gpNum,
+                      h_gpNum_last,
+                      softNum);
 
         //printf("collision num  %d\n", h_cpNum[0]);
 
-        cudaEventRecord(start);
+        CUDA_SAFE_CALL(cudaEventRecord(start));
         timemakePd += computeGradientAndHessian(TetMesh);
 
 
@@ -7861,9 +8004,9 @@ int              GIPC::solve_subIP(device_TetraData& TetMesh,
         {
             break;
         }
-        cudaEventRecord(end0);
+        CUDA_SAFE_CALL(cudaEventRecord(end0));
         total_Cg_count += calculateMovingDirection(TetMesh, h_cpNum[0], pcg_data.P_type);
-        cudaEventRecord(end1);
+        CUDA_SAFE_CALL(cudaEventRecord(end1));
         double alpha = 1.0, slackness_a = 0.8, slackness_m = 0.8;
 
         alpha =
@@ -7895,23 +8038,23 @@ int              GIPC::solve_subIP(device_TetraData& TetMesh,
             }
         }
 
-        cudaEventRecord(end2);
+        CUDA_SAFE_CALL(cudaEventRecord(end2));
         //printf("alpha:  %f\n", alpha);
 
-        bool isStop = lineSearch(TetMesh, alpha, alpha_CFL);
-        cudaEventRecord(end3);
+        lineSearch(TetMesh, alpha, alpha_CFL);
+        CUDA_SAFE_CALL(cudaEventRecord(end3));
         postLineSearch(TetMesh, alpha);
-        cudaEventRecord(end4);
+        CUDA_SAFE_CALL(cudaEventRecord(end4));
         //BH.FREE_DEVICE_MEM();
         //if (h_cpNum[0] > 0) return;
         CUDA_SAFE_CALL(cudaDeviceSynchronize());
         float time00, time11, time22, time33, time44;
-        cudaEventElapsedTime(&time00, start, end0);
-        cudaEventElapsedTime(&time11, end0, end1);
+        CUDA_SAFE_CALL(cudaEventElapsedTime(&time00, start, end0));
+        CUDA_SAFE_CALL(cudaEventElapsedTime(&time11, end0, end1));
         //total_Cg_time += time1;
-        cudaEventElapsedTime(&time22, end1, end2);
-        cudaEventElapsedTime(&time33, end2, end3);
-        cudaEventElapsedTime(&time44, end3, end4);
+        CUDA_SAFE_CALL(cudaEventElapsedTime(&time22, end1, end2));
+        CUDA_SAFE_CALL(cudaEventElapsedTime(&time33, end2, end3));
+        CUDA_SAFE_CALL(cudaEventElapsedTime(&time44, end3, end4));
         time0 += time00;
         time1 += time11;
         time2 += time22;
@@ -7919,13 +8062,6 @@ int              GIPC::solve_subIP(device_TetraData& TetMesh,
         time4 += time44;
         ////*cflTime = ptime;
         //printf("time0 = %f,  time1 = %f,  time2 = %f,  time3 = %f,  time4 = %f\n", time00, time11, time22, time33, time44);
-        (cudaEventDestroy(start));
-        (cudaEventDestroy(end0));
-        (cudaEventDestroy(end1));
-        (cudaEventDestroy(end2));
-        (cudaEventDestroy(end3));
-        (cudaEventDestroy(end4));
-        totalTimeStep += alpha;
     }
     //iterV.push_back(k);
     //std::ofstream outiter("iterCount.txt");
@@ -8034,11 +8170,11 @@ bool   isRotate     = false;
 void   GIPC::IPC_Solver(device_TetraData& TetMesh)
 {
     //double animation_fullRate = 0;
-    cudaEvent_t start, end0;
-    cudaEventCreate(&start);
-    cudaEventCreate(&end0);
+    ensureTimingEvents();
+    cudaEvent_t start = _frame_timing_events[0];
+    cudaEvent_t end0  = _frame_timing_events[1];
     double alpha = 1;
-    cudaEventRecord(start);
+    CUDA_SAFE_CALL(cudaEventRecord(start));
     //    if(isRotate&&total_Frames*IPC_dt>=2.2){
     //        isRotate = false;
     //        updateBoundary2(TetMesh);
@@ -8063,16 +8199,12 @@ void   GIPC::IPC_Solver(device_TetraData& TetMesh)
         updateBoundaryMoveDir(TetMesh, alpha);
         stepForward(TetMesh.vertexes, TetMesh.temp_double3Mem, _moveDir, TetMesh.BoundaryType, 1, true, vertexNum);
 
-        bool rehash = true;
-
         buildBVH();
-        int numOfIntersect = 0;
         while(isIntersected(TetMesh))
         {
             //printf("type 0 intersection happened\n");
             alpha /= 2.0;
             updateBoundaryMoveDir(TetMesh, alpha);
-            numOfIntersect++;
             stepForward(TetMesh.vertexes,
                         TetMesh.temp_double3Mem,
                         _moveDir,
@@ -8095,18 +8227,10 @@ void   GIPC::IPC_Solver(device_TetraData& TetMesh)
     initKappa(TetMesh);
 
 #ifdef USE_FRICTION
-    CUDA_SAFE_CALL(cudaMalloc((void**)&lambda_lastH_scalar, h_cpNum[0] * sizeof(double)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&distCoord, h_cpNum[0] * sizeof(double2)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&tanBasis, h_cpNum[0] * sizeof(__GEIGEN__::Matrix3x2d)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_collisonPairs_lastH, h_cpNum[0] * sizeof(int4)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_MatIndex_last, h_cpNum[0] * sizeof(int)));
-
-    CUDA_SAFE_CALL(cudaMalloc((void**)&lambda_lastH_scalar_gd, h_gpNum * sizeof(double)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&_collisonPairs_lastH_gd, h_gpNum * sizeof(uint32_t)));
+    resizeFrictionBuffers();
     buildFrictionSets();
 #endif
     animation_fullRate = animation_subRate;
-    int    k           = 0;
     double time0       = 0;
     double time1       = 0;
     double time2       = 0;
@@ -8167,46 +8291,18 @@ void   GIPC::IPC_Solver(device_TetraData& TetMesh)
 
         //computeXTilta(TetMesh, 1);
 #ifdef USE_FRICTION
-        CUDA_SAFE_CALL(cudaFree(lambda_lastH_scalar));
-        CUDA_SAFE_CALL(cudaFree(distCoord));
-        CUDA_SAFE_CALL(cudaFree(tanBasis));
-        CUDA_SAFE_CALL(cudaFree(_collisonPairs_lastH));
-        CUDA_SAFE_CALL(cudaFree(_MatIndex_last));
-
-        CUDA_SAFE_CALL(cudaFree(lambda_lastH_scalar_gd));
-        CUDA_SAFE_CALL(cudaFree(_collisonPairs_lastH_gd));
-
-        CUDA_SAFE_CALL(cudaMalloc((void**)&lambda_lastH_scalar, h_cpNum[0] * sizeof(double)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&distCoord, h_cpNum[0] * sizeof(double2)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&tanBasis,
-                                  h_cpNum[0] * sizeof(__GEIGEN__::Matrix3x2d)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&_collisonPairs_lastH, h_cpNum[0] * sizeof(int4)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&_MatIndex_last, h_cpNum[0] * sizeof(int)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&lambda_lastH_scalar_gd, h_gpNum * sizeof(double)));
-        CUDA_SAFE_CALL(cudaMalloc((void**)&_collisonPairs_lastH_gd,
-                                  h_gpNum * sizeof(uint32_t)));
+        resizeFrictionBuffers();
         buildFrictionSets();
 #endif
     }
 
-#ifdef USE_FRICTION
-    CUDA_SAFE_CALL(cudaFree(lambda_lastH_scalar));
-    CUDA_SAFE_CALL(cudaFree(distCoord));
-    CUDA_SAFE_CALL(cudaFree(tanBasis));
-    CUDA_SAFE_CALL(cudaFree(_collisonPairs_lastH));
-    CUDA_SAFE_CALL(cudaFree(_MatIndex_last));
-
-    CUDA_SAFE_CALL(cudaFree(lambda_lastH_scalar_gd));
-    CUDA_SAFE_CALL(cudaFree(_collisonPairs_lastH_gd));
-#endif
-
     updateVelocities(TetMesh);
 
     computeXTilta(TetMesh, 1);
-    cudaEventRecord(end0);
+    CUDA_SAFE_CALL(cudaEventRecord(end0));
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
     float tttime;
-    cudaEventElapsedTime(&tttime, start, end0);
+    CUDA_SAFE_CALL(cudaEventElapsedTime(&tttime, start, end0));
     totalTime += tttime;
     total_Frames++;
     printf("average time cost:     %f,    frame id:   %d\n", totalTime / totalNT, total_Frames);
@@ -8220,23 +8316,23 @@ void   GIPC::IPC_Solver(device_TetraData& TetMesh)
     ttime4 += time4;
 
 
-    std::ofstream outTime("timeCost.txt");
-
-    outTime << "time0: " << ttime0 / 1000.0 << std::endl;
-    outTime << "time1: " << ttime1 / 1000.0 << std::endl;
-    outTime << "time2: " << ttime2 / 1000.0 << std::endl;
-    outTime << "time3: " << ttime3 / 1000.0 << std::endl;
-    outTime << "time4: " << ttime4 / 1000.0 << std::endl;
-    outTime << "time_makePD: " << timemakePd / 1000.0 << std::endl;
-
-    outTime << "totalTime: " << totalTime / 1000.0 << std::endl;
-    outTime << "total iter: " << totalNT << std::endl;
-    outTime << "frames: " << total_Frames << std::endl;
-    outTime << "totalCollisionNum: " << totalCollisionPairs << std::endl;
-    outTime << "averageCollision: " << totalCollisionPairs / totalNT << std::endl;
-    outTime << "maxCOllisionPairNum: " << maxCOllisionPairNum << std::endl;
-    outTime << "totalCgTime: " << total_Cg_count << std::endl;
-    outTime.close();
+    if(std::getenv("GIPC_WRITE_TIMING"))
+    {
+        std::ofstream outTime("timeCost.txt");
+        outTime << "time0: " << ttime0 / 1000.0 << std::endl;
+        outTime << "time1: " << ttime1 / 1000.0 << std::endl;
+        outTime << "time2: " << ttime2 / 1000.0 << std::endl;
+        outTime << "time3: " << ttime3 / 1000.0 << std::endl;
+        outTime << "time4: " << ttime4 / 1000.0 << std::endl;
+        outTime << "time_makePD: " << timemakePd / 1000.0 << std::endl;
+        outTime << "totalTime: " << totalTime / 1000.0 << std::endl;
+        outTime << "total iter: " << totalNT << std::endl;
+        outTime << "frames: " << total_Frames << std::endl;
+        outTime << "totalCollisionNum: " << totalCollisionPairs << std::endl;
+        outTime << "averageCollision: " << totalCollisionPairs / totalNT << std::endl;
+        outTime << "maxCOllisionPairNum: " << maxCOllisionPairNum << std::endl;
+        outTime << "totalCgTime: " << total_Cg_count << std::endl;
+    }
 }
 
 

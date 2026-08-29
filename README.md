@@ -1,34 +1,30 @@
 # GPU IPC
 
-The first fully GPU-optimized IPC framework — source code of the paper
+The first fully GPU-optimized IPC framework and source code for
 **[GIPC: Fast and Stable Gauss-Newton Optimization of IPC Barrier Energy](https://dl.acm.org/doi/10.1145/3643028)**,
 *ACM Transactions on Graphics*, 2024.
 
-This project serves as an excellent benchmark for conducting further research on GPU IPC,
-enabling valuable comparisons to be made.
+GPU IPC is also useful as a benchmark for research on GPU collision handling,
+barrier methods, and nonlinear finite-element simulation.
 
 **Authors:** Kemeng Huang, Floyd M. Chitalu, Huancheng Lin, Taku Komura
-
 **Source code contributor:** [Kemeng Huang](https://kemenghuang.github.io)
 
 [![Watch the video](https://github.com/KemengHuang/GPU_IPC/blob/main/Assets/video1.png)](https://youtu.be/5rwp6AiHtrw)
 
----
-
 ## Requirements
 
-- **Hardware:** NVIDIA GPU (CUDA-capable)
-- **Platforms:** Windows, Linux
-- **Toolchain:** CMake ≥ 3.18, a C++17 compiler, CUDA Toolkit
-
-| Name     | Version | Usage             | Import         |
-| -------- | ------- | ----------------- | -------------- |
-| CUDA     | ≥ 11.0  | GPU programming   | system install |
-| Eigen3   | 3.4.0   | matrix calculation| package        |
-| freeglut | 3.4.0   | visualization     | package        |
-| GLEW     | 2.2.0   | visualization     | package        |
+- NVIDIA CUDA-capable GPU
+- Windows or Linux
+- CMake 3.24 or newer
+- C++17 compiler and a compatible CUDA Toolkit
+- Eigen 3.4, freeglut 3.4, and GLEW 2.2
 
 ## Build
+
+By default CMake builds device code for the GPU installed on the build host.
+For a distributable binary, set `CMAKE_CUDA_ARCHITECTURES` explicitly (for
+example, `86` for Ampere, `89` for Ada, or `120` for Blackwell).
 
 ### Linux
 
@@ -41,9 +37,9 @@ cmake --build build -j
 
 ### Windows
 
-We use [vcpkg](https://github.com/microsoft/vcpkg) to manage dependencies.
-The simplest way to let CMake detect vcpkg is to set the system environment variable
-`CMAKE_TOOLCHAIN_FILE` to `(YOUR_VCPKG_FOLDER)/vcpkg/scripts/buildsystems/vcpkg.cmake`.
+The dependencies can be installed with [vcpkg](https://github.com/microsoft/vcpkg).
+Set `CMAKE_TOOLCHAIN_FILE` to
+`<vcpkg>/scripts/buildsystems/vcpkg.cmake`, then run:
 
 ```bat
 vcpkg install eigen3 freeglut glew
@@ -52,103 +48,115 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-> **GPU architecture:** `CMakeLists.txt` targets `CUDA_ARCHITECTURES 86` (Ampere, sm_86)
-> by default. Edit that line to match your GPU
-> (e.g. `89` for Ada/RTX 40xx, `90` for Hopper).
+To override the detected GPU architecture:
+
+```bash
+cmake -S . -B build -DCMAKE_CUDA_ARCHITECTURES=86
+```
 
 ## Run
 
 ```bash
 # Linux
 ./build/gipc
+
 # Windows
 build\Release\gipc.exe
 ```
 
-A GLUT window opens and starts the default simulation scene (two stacked bunnies
-loaded from `Assets/tetMesh/bunny2.msh`). Asset and output paths are compiled in
-via the `GIPC_ASSETS_DIR` / `GIPC_OUTPUT_DIR` definitions, so the executable can
+A GLUT window opens the default simulation scene. Asset and output paths are
+compiled through `GIPC_ASSETS_DIR` and `GIPC_OUTPUT_DIR`, so the executable can
 be launched from any working directory.
 
 ### Viewer controls
 
-| Input        | Action                          |
-| ------------ | ------------------------------- |
-| mouse drag   | rotate view                     |
-| `w` `s` `a` `d` `q` `e` | translate view         |
-| `space`      | pause / resume simulation       |
-| `k`          | toggle surface rendering        |
-| `f`          | toggle BVH rendering            |
-| `9`          | toggle surface export           |
-| `/`          | toggle screenshot capture       |
+| Input | Action |
+| --- | --- |
+| mouse drag | rotate view |
+| `w` `s` `a` `d` `q` `e` | translate view |
+| `space` | pause or resume simulation |
+| `k` | toggle surface rendering |
+| `f` | toggle BVH rendering |
+| `9` | toggle surface export |
+| `/` | toggle screenshot capture |
 
 ## Configuration
 
-Simulation parameters live in `Assets/scene/parameterSetting.txt` — material
-properties (density, Young's modulus, Poisson ratio, friction), time step,
-solver tolerances (`pcg_solver_threshold`, `Newton_solver_threshold`), the
-relative collision distance threshold (`IPC_ralative_dHat`), etc. Edit the
-text file and restart; no recompilation needed.
+Simulation parameters live in `Assets/scene/parameterSetting.txt`, including
+material properties, time step, solver tolerances, friction, and the relative
+collision distance threshold. Restart the executable after editing the file;
+recompilation is not required.
 
-### GPU buffer sizes
+### Dynamic GPU memory
 
-It may be necessary to manually adjust the GPU memory buffers to match the
-specific requirements of the simulation scene.
+Collision and Hessian storage grows automatically:
 
-**Collision buffers** are derived from the loaded meshes at startup
-(`gl_main.cpp`, scaled by `collision_detection_buff_scale` in the parameter
-file):
+- DCD pairs start at 100,000 entries.
+- CCD pairs start at 1,000,000 entries.
+- A collision pass that exceeds capacity finishes counting without writing out
+  of bounds, grows geometrically, and reruns to regenerate the complete list.
+- Hessian block arrays are resized from the current fixed-energy and contact
+  counts before assembly.
+- MAS workspaces and friction/close-constraint history retain capacity across
+  frames.
+- CUB scan, radix-sort, and reduction operations share a persistent temporary
+  workspace, so steady-state frames do not allocate CUB scratch memory.
 
-![collision buffer](Assets/collision.JPG)
+The old `collision_detection_buff_scale` setting is retained for compatibility
+and diagnostics, but correctness no longer depends on manually tuning a maximum
+pair count.
 
-**Hessian buffers** are sized by the `minCollisionBuffer*` heuristics in
-`BHessian::MALLOC_DEVICE_MEM_O` (`PCG_SOLVER.cu`):
+## Batch and memory validation
 
-![hessian buffer](Assets/hessian.JPG)
+Set `GIPC_STEPS` to run without entering the viewer loop. `GIPC_STEPS=0` loads
+and initializes the scene only. `GIPC_DUMP_STATE` writes packed final `double3`
+vertex positions. Set `GIPC_WRITE_TIMING=1` only when the per-frame
+`timeCost.txt` report is needed; normal runs avoid that disk write.
+
+```bash
+GIPC_STEPS=10 GIPC_DUMP_STATE=state.bin ./build/gipc
+```
+
+`GIPC_STRESS_DYNAMIC_MEMORY=1` starts pair buffers at one entry and Hessian
+buffers at zero. It is intended to exercise every dynamic-growth path:
+
+```bash
+GIPC_STEPS=1 GIPC_STRESS_DYNAMIC_MEMORY=1 \
+  compute-sanitizer --tool memcheck --leak-check full ./build/gipc
+```
 
 ## Project structure
 
-```
+```text
 GPU_IPC/
-├── GIPC.cu/.cuh          # core IPC solver: barrier gradient/Hessian, CCD,
-│                         # line search, Newton main loop
-├── PCG_SOLVER.cu/.cuh    # GPU PCG and MAS-PCG linear solvers
-├── MASPreconditioner.*   # preconditioner assembly
-├── mlbvh.cu/.cuh         # LBVH broad-phase collision detection
-├── ACCD.cu/.cuh          # continuous collision detection
-├── femEnergy.cu/.cuh     # FEM elasticity energy
-├── gpu_eigen_libs.cuh    # header-only fixed-size matrix math (SVD, solver)
-├── GIPC_PDerivative.cuh  # auto-generated analytic energy derivatives
-├── gl_main.cpp           # GLUT viewer and scene setup
-└── load_mesh.*           # mesh I/O
-Assets/
-├── scene/parameterSetting.txt   # simulation parameters
-├── tetMesh/                     # volumetric meshes (.msh)
-└── triMesh/                     # cloth meshes (.obj)
+├── GIPC.cu/.cuh             core IPC solver, CCD, line search, and Newton loop
+├── PCG_SOLVER.cu/.cuh       block-Jacobi PCG and MAS-PCG
+├── MASPreconditioner.*      multilevel additive Schwarz preconditioner
+├── mlbvh.cu/.cuh            LBVH broad-phase collision detection
+├── device_buffer.h          move-only persistent CUDA buffer ownership
+├── cuda_cub_wrappers.*      persistent CUB scan/sort/reduction workspace
+├── ACCD.cu/.cuh             continuous collision detection
+├── femEnergy.cu/.cuh        FEM elasticity energy
+├── gpu_eigen_libs.cuh       fixed-size GPU matrix operations
+├── GIPC_PDerivative.cuh     analytic energy derivatives
+├── gl_main.cpp              GLUT viewer and batch regression entry point
+└── load_mesh.*              mesh I/O
 ```
 
-## BibTeX
-
-Please cite the following paper if it helps.
+## Citation
 
 ```bibtex
 @article{gipc2024,
-author = {Huang, Kemeng and Chitalu, Floyd M. and Lin, Huancheng and Komura, Taku},
-title = {GIPC: Fast and Stable Gauss-Newton Optimization of IPC Barrier Energy},
-year = {2024},
-issue_date = {April 2024},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-volume = {43},
-number = {2},
-issn = {0730-0301},
-url = {https://doi.org/10.1145/3643028},
-doi = {10.1145/3643028},
-abstract = {Barrier functions are crucial for maintaining an intersection- and inversion-free simulation trajectory but existing methods, which directly use distance can restrict implementation design and performance. We present an approach to rewriting the barrier function for arriving at an efficient and robust approximation of its Hessian. The key idea is to formulate a simplicial geometric measure of contact using mesh boundary elements, from which analytic eigensystems are derived and enhanced with filtering and stiffening terms that ensure robustness with respect to the convergence of a Project-Newton solver. A further advantage of our rewriting of the barrier function is that it naturally caters to the notorious case of nearly parallel edge-edge contacts for which we also present a novel analytic eigensystem. Our approach is thus well suited for standard second-order unconstrained optimization strategies for resolving contacts, minimizing nonlinear nonconvex functions where the Hessian may be indefinite. The efficiency of our eigensystems alone yields a 3\texttimes{} speedup over the standard Incremental Potential Contact (IPC) barrier formulation. We further apply our analytic proxy eigensystems to produce an entirely GPU-based implementation of IPC with significant further acceleration.},
-journal = {ACM Trans. Graph.},
-month = {mar},
-articleno = {23},
-numpages = {18},
-keywords = {IPC, Barrier Hessian, eigen analysis, GPU}
+  author = {Huang, Kemeng and Chitalu, Floyd M. and Lin, Huancheng and Komura, Taku},
+  title = {GIPC: Fast and Stable Gauss-Newton Optimization of IPC Barrier Energy},
+  year = {2024},
+  publisher = {Association for Computing Machinery},
+  volume = {43},
+  number = {2},
+  doi = {10.1145/3643028},
+  journal = {ACM Trans. Graph.},
+  month = {mar},
+  articleno = {23},
+  numpages = {18}
 }
 ```

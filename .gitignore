@@ -1,3 +1,5 @@
 Output/*
 *build/*
+build_error.log
+timeCost.txt
 

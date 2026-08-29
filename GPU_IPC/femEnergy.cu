@@ -23,12 +23,6 @@ namespace LibShell {
     }
 
     __device__ __host__
-        static Eigen::Matrix2d adjugate(Eigen::Matrix2d M) {
-        Eigen::Matrix2d ret;
-        ret << M(1, 1), -M(0, 1), -M(1, 0), M(0, 0);
-        return ret;
-    }
-    __device__ __host__
         static double angle(const Eigen::Vector3d& v, const Eigen::Vector3d& w, const Eigen::Vector3d& axis,
             Eigen::Matrix<double, 1, 9>* derivative, // v, w
             Eigen::Matrix<double, 9, 9>* hessian
@@ -296,10 +290,8 @@ __device__ __GEIGEN__::Matrix3x3d __computePEPF_StableNHK3D_double(
 __device__
 __GEIGEN__::Matrix3x3d computePEPF_ARAP_double(const __GEIGEN__::Matrix3x3d& F, const __GEIGEN__::Matrix3x3d& Sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double& lengthRate)
 {
-    __GEIGEN__::Matrix3x3d R, S;
-
-    S = __GEIGEN__::__M_Mat_multiply(__GEIGEN__::__M_Mat_multiply(V, Sigma), __GEIGEN__::__Transpose3x3(V));//V * sigma * V.transpose();
-    R = __GEIGEN__::__M_Mat_multiply(U, __GEIGEN__::__Transpose3x3(V));
+    __GEIGEN__::Matrix3x3d R =
+        __GEIGEN__::__M_Mat_multiply(U, __GEIGEN__::__Transpose3x3(V));
     __GEIGEN__::Matrix3x3d g = __GEIGEN__::__Mat3x3_minus(F, R);
     return __GEIGEN__::__S_Mat_multiply(g, lengthRate);//lengthRate * g;
 }
@@ -307,10 +299,6 @@ __GEIGEN__::Matrix3x3d computePEPF_ARAP_double(const __GEIGEN__::Matrix3x3d& F, 
 __device__
 __GEIGEN__::Matrix9x9d project_ARAP_H_3D(const __GEIGEN__::Matrix3x3d& Sigma, const __GEIGEN__::Matrix3x3d& U, const __GEIGEN__::Matrix3x3d& V, const double& lengthRate)
 {
-    __GEIGEN__::Matrix3x3d R, S;
-
-    S = __GEIGEN__::__M_Mat_multiply(__GEIGEN__::__M_Mat_multiply(V, Sigma), __GEIGEN__::__Transpose3x3(V));//V * sigma * V.transpose();
-    R = __GEIGEN__::__M_Mat_multiply(U, __GEIGEN__::__Transpose3x3(V));
     __GEIGEN__::Matrix3x3d T0, T1, T2;
 
     __GEIGEN__::__set_Mat_val(T0, 0, -1, 0, 1, 0, 0, 0, 0, 0);
@@ -343,7 +331,6 @@ __GEIGEN__::Matrix9x9d project_ARAP_H_3D(const __GEIGEN__::Matrix3x3d& Sigma, co
 
     __GEIGEN__::Matrix9x9d SH, M9_temp;
     __GEIGEN__::__identify_Mat9x9(SH);
-    __GEIGEN__::Vector9 V9_temp;
 
 
     M9_temp = __GEIGEN__::__v9_vec9_toMat9x9(t0, t0);
@@ -420,14 +407,6 @@ __GEIGEN__::Matrix6x6d __project_BaraffWitkinStretch_H(const __GEIGEN__::Matrix3
 
 __device__
 __GEIGEN__::Matrix6x6d __project_BaraffWitkinShear_H(const __GEIGEN__::Matrix3x2d& F) {
-
-    __GEIGEN__::Matrix6x6d H;
-    H.m[0][0] = H.m[0][1] = H.m[0][2] = H.m[0][3] = H.m[0][4] = H.m[0][5] = 0;
-    H.m[1][0] = H.m[1][1] = H.m[1][2] = H.m[1][3] = H.m[1][4] = H.m[1][5] = 0;
-    H.m[2][0] = H.m[2][1] = H.m[2][2] = H.m[2][3] = H.m[2][4] = H.m[2][5] = 0;
-    H.m[3][0] = H.m[3][1] = H.m[3][2] = H.m[3][3] = H.m[3][4] = H.m[3][5] = 0;
-    H.m[4][0] = H.m[4][1] = H.m[4][2] = H.m[4][3] = H.m[4][4] = H.m[4][5] = 0;
-    H.m[5][0] = H.m[5][1] = H.m[5][2] = H.m[5][3] = H.m[5][4] = H.m[5][5] = 0;
     double2 u, v;
     u.x = 1; u.y = 0;
     v.x = 0; v.y = 1;
@@ -662,11 +641,9 @@ double __cal_ARAP_energy_3D(const double3* vertexes, const uint4& tetrahedra, co
     __GEIGEN__::Matrix3x3d F;
     __M_Mat_multiply(Ds, DmInverse, F);
     //printf("%f  %f  %f\n%f  %f  %f\n%f  %f  %f\n\n\n\n\n\n", F.m[0][0], F.m[0][1], F.m[0][2], F.m[1][0], F.m[1][1], F.m[1][2], F.m[2][0], F.m[2][1], F.m[2][2]);
-    __GEIGEN__::Matrix3x3d U, V, sigma, S, R;
-    __GEIGEN__::Matrix3x3d M_Temp0, M_Temp1;
+    __GEIGEN__::Matrix3x3d U, V, sigma, R;
     SVD(F, U, V, sigma);
 
-    S = __GEIGEN__::__M_Mat_multiply(__GEIGEN__::__M_Mat_multiply(V, sigma), __GEIGEN__::__Transpose3x3(V));//V * sigma * V.transpose();
     R = __GEIGEN__::__M_Mat_multiply(U, __GEIGEN__::__Transpose3x3(V));
     __GEIGEN__::Matrix3x3d g = __GEIGEN__::__Mat3x3_minus(F, R);
     double energy = 0;
@@ -963,7 +940,7 @@ __device__ void BuildTwistAndFlipEigenvectors(const Matrix3d&       U,
     Eigen::Map<M3>(Q.data() + 45) = E + F;
 }
 
-__device__ Eigen::Matrix<double, 9, 9> __project_StabbleNHK_H_3D_makePD(
+__device__ void __project_StabbleNHK_H_3D_makePD(
     __GEIGEN__::Matrix9x9d& H,
                                                                   double I3,
                                                                   const double& mu,
@@ -1291,7 +1268,7 @@ void _calculate_bending_gradient_hessian(const double3* vertexes, const double3*
     if (idx >= edgeNum) return;
     uint2 edge = edges[idx];
     uint2 adj = edges_adj_vertex[idx];
-    if (adj.y == -1) {
+    if (adj.y == 0xffffffffU) {
         __GEIGEN__::Matrix12x12d Zero;
         for (int i = 0; i < 12; i++) {
             for (int j = 0; j < 12; j++) {
@@ -1367,7 +1344,7 @@ void _calculate_bending_gradient_hessian(const double3* vertexes, const double3*
 __device__
 double __cal_bending_energy(const double3* vertexes, const double3* rest_vertexes, const uint2& edge, const uint2& adj, double length, double bendStiff)
 {
-    if (adj.y == -1)return 0;
+    if (adj.y == 0xffffffffU)return 0;
     auto x0 = vertexes[edge.x];
     auto x1 = vertexes[edge.y];
     auto x2 = vertexes[adj.x];
@@ -1403,10 +1380,6 @@ double __cal_bending_energy(const double3* vertexes, const double3* rest_vertexe
 
 
 double calculateVolum(const double3* vertexes, const uint4& index) {
-    int id0 = 0;
-    int id1 = 1;
-    int id2 = 2;
-    int id3 = 3;
     double o1x = vertexes[index.y].x - vertexes[index.x].x;
     double o1y = vertexes[index.y].y - vertexes[index.x].y;
     double o1z = vertexes[index.y].z - vertexes[index.x].z;

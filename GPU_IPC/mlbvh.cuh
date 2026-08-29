@@ -11,6 +11,7 @@
 #define _MLBVH_CUH_
 #include <cstdint>
 #include <cuda_runtime.h>
+#include "device_buffer.h"
 #include "device_launch_parameters.h"
 
 struct AABB {
@@ -34,54 +35,53 @@ public:
 
 class lbvh {
 public:
-    uint32_t vert_number;
-    double3* _vertexes;
-    AABB* _bvs;
-    AABB* _tempLeafBox;
-    Node* _nodes;
-    uint64_t* _MChash;
-    uint32_t* _indices;
-    int4* _collisionPair;
-    int4* _ccd_collisionPair;
-    uint32_t* _cpNum;
-    int* _MatIndex;
-    uint32_t* _flags;
+    uint32_t vert_number = 0;
+    double3* _vertexes = nullptr;
+    gpuipc::DeviceBuffer<AABB> _bvs;
+    gpuipc::DeviceBuffer<AABB> _tempLeafBox;
+    gpuipc::DeviceBuffer<Node> _nodes;
+    gpuipc::DeviceBuffer<uint64_t> _MChash;
+    gpuipc::DeviceBuffer<uint32_t> _indices;
+    gpuipc::DeviceBuffer<uint64_t> _sort_morton_codes;
+    gpuipc::DeviceBuffer<uint32_t> _sort_indices;
+    gpuipc::DeviceBuffer<uint32_t> _flags;
     AABB scene;
-    int* _btype;
+    int* _btype = nullptr;
 public:
     lbvh() {}
     ~lbvh();
     void MALLOC_DEVICE_MEM(const int& number);
     void FREE_DEVICE_MEM();
+    void sort_morton_codes(int number);
     //void Construct();
 };
 
 
 class lbvh_f : public lbvh {
 public:
-    uint32_t face_number;
-    uint3* _faces;
-    uint32_t* _surfVerts;
+    uint32_t face_number = 0;
+    uint3* _faces = nullptr;
+    uint32_t* _surfVerts = nullptr;
 public:
-    void init(int* _btype, double3* _mVerts, uint3* _mFaces, uint32_t* _mSurfVert, int4* _mCollisonPairs, int4* _ccd_mCollisonPairs, uint32_t* _mcpNum, int* _mMatIndex, const int& faceNum, const int& vertNum);
+    void init(int* _btype, double3* _mVerts, uint3* _mFaces, uint32_t* _mSurfVert, const int& faceNum, const int& vertNum);
     double Construct();
     AABB* getSceneSize();
     double ConstructFullCCD(const double3* moveDir, const double& alpha);
-    void SelfCollitionDetect(double dHat);
-    void SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha);
+    void SelfCollitionDetect(double dHat, int4* collisionPairs, int4* ccdCollisionPairs, uint32_t* pairCounts, int* matrixIndices, uint32_t pairCapacity);
+    void SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha, int4* ccdCollisionPairs, uint32_t* pairCount, uint32_t pairCapacity);
 };
 
 class lbvh_e : public lbvh{
 public:
-    double3* _rest_vertexes;
-    uint32_t edge_number;
-    uint2* _edges;
+    double3* _rest_vertexes = nullptr;
+    uint32_t edge_number = 0;
+    uint2* _edges = nullptr;
 public:
-    void init(int* _btype, double3* _mVerts, double3* _rest_vertexes, uint2* _mEdges, int4* _mCollisonPairs, int4* _ccd_mCollisonPairs, uint32_t* _mcpNum, int* _mMatIndex, const int& edgeNum, const int& vertNum);
+    void init(int* _btype, double3* _mVerts, double3* _rest_vertexes, uint2* _mEdges, const int& edgeNum, const int& vertNum);
     double Construct();
     double ConstructFullCCD(const double3* moveDir, const double& alpha);
-    void SelfCollitionDetect(double dHat);
-    void SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha);
+    void SelfCollitionDetect(double dHat, int4* collisionPairs, int4* ccdCollisionPairs, uint32_t* pairCounts, int* matrixIndices, uint32_t pairCapacity);
+    void SelfCollitionFullDetect(double dHat, const double3* moveDir, const double& alpha, int4* ccdCollisionPairs, uint32_t* pairCount, uint32_t pairCapacity);
 };
 
 __device__
