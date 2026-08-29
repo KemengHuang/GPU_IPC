@@ -101,8 +101,8 @@ public:
 
 	BHessian BH;
 	AABB SceneSize;
-	int MAX_COLLITION_PAIRS_NUM = 0;
-	int MAX_CCD_COLLITION_PAIRS_NUM = 0;
+	//int MAX_COLLITION_PAIRS_NUM = 0;
+	//int MAX_CCD_COLLITION_PAIRS_NUM = 0;
 
 	//double RestNHEnergy;
 	double animation_subRate;

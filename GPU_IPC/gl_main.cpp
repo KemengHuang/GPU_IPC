@@ -758,12 +758,12 @@ void initScene1(int argc, char** argv)
     ipc.tri_edge_num   = tetMesh.tri_edges.size();
 
     //ipc.IPC_dt = 0.01 / 1.0;//1.0 / 30;//1.0 / 100;
-    ipc.MAX_CCD_COLLITION_PAIRS_NUM =
-        1 * collision_detection_buff_scale
-        * (((double)(ipc.surface_Num * 15 + ipc.edge_Num * 10))
-           * std::max((ipc.IPC_dt / 0.01), 2.0));
-    ipc.MAX_COLLITION_PAIRS_NUM = (ipc.surf_vertexNum * 3 + ipc.edge_Num * 2)
-                                  * 3 * collision_detection_buff_scale;
+    //ipc.MAX_CCD_COLLITION_PAIRS_NUM =
+    //    1 * collision_detection_buff_scale
+    //    * (((double)(ipc.surface_Num * 15 + ipc.edge_Num * 10))
+    //       * std::max((ipc.IPC_dt / 0.01), 2.0));
+    //ipc.MAX_COLLITION_PAIRS_NUM = (ipc.surf_vertexNum * 3 + ipc.edge_Num * 2)
+    //                              * 3 * collision_detection_buff_scale;
 
     ipc.triangleNum = tetMesh.triangleNum;
     ipc.targetVert  = d_tetMesh.targetVert;
@@ -776,9 +776,9 @@ void initScene1(int argc, char** argv)
            ipc.tetrahedraNum,
            ipc.surface_Num);
     printf("surfVertNum: %d      surfEdgesNum: %d\n", ipc.surf_vertexNum, ipc.edge_Num);
-    printf("maxCollisionPairsNum_CCD: %d      maxCollisionPairsNum: %d\n",
-           ipc.MAX_CCD_COLLITION_PAIRS_NUM,
-           ipc.MAX_COLLITION_PAIRS_NUM);
+    //printf("maxCollisionPairsNum_CCD: %d      maxCollisionPairsNum: %d\n",
+    //       ipc.MAX_CCD_COLLITION_PAIRS_NUM,
+    //       ipc.MAX_COLLITION_PAIRS_NUM);
 
     //ipc.USE_MAS = false;
     ipc.pcg_data.P_type = 1;

@@ -17,7 +17,7 @@ endif()
 
 # Initialize project with C++ and CUDA languages
 project(gpu_ipc LANGUAGES CXX CUDA)
-include(CTest)
+#include(CTest)
 
 # =============================================================================
 # Language Standards Configuration

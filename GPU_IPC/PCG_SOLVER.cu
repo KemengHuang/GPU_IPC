@@ -777,8 +777,9 @@ void BHessian::MALLOC_DEVICE_MEM_O(const int& tet_number,
     }
     constexpr size_t initial_contact_blocks = 100'000;
     const size_t count4 = initial_contact_blocks + static_cast<size_t>(tet_number)
-                          + static_cast<size_t>(tri_Edge_number);
-    const size_t count3 = initial_contact_blocks + static_cast<size_t>(triangle_num);
+                          + static_cast<size_t>(tri_Edge_number) + initial_contact_blocks;
+    const size_t count3 = initial_contact_blocks + static_cast<size_t>(triangle_num)
+                          + initial_contact_blocks;
     const size_t count1 = std::max(initial_contact_blocks,
                                    2 * static_cast<size_t>(surfvert_number));
     H12x12.reserve(count4);
