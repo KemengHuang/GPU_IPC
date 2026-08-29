@@ -94,17 +94,15 @@ Collision and Hessian storage grows automatically:
 - DCD pairs start at 100,000 entries.
 - CCD pairs start at 1,000,000 entries.
 - A collision pass that exceeds capacity finishes counting without writing out
-  of bounds, grows geometrically, and reruns to regenerate the complete list.
-- Hessian block arrays are resized from the current fixed-energy and contact
-  counts before assembly.
+  of bounds, grows to at least 150% of the latest requirement, and reruns to
+  regenerate the complete list.
+- Hessian block arrays use the current fixed-energy/contact count as the live
+  size and allocate 150% of that latest requirement whenever capacity is
+  exceeded.
 - MAS workspaces and friction/close-constraint history retain capacity across
   frames.
 - CUB scan, radix-sort, and reduction operations share a persistent temporary
   workspace, so steady-state frames do not allocate CUB scratch memory.
-
-The old `collision_detection_buff_scale` setting is retained for compatibility
-and diagnostics, but correctness no longer depends on manually tuning a maximum
-pair count.
 
 ## Batch and memory validation
 

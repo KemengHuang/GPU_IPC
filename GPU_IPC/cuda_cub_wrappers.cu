@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 
 namespace gpuipc
@@ -35,12 +37,14 @@ class PersistentCubWorkspace
         if(bytes <= m_capacity)
             return m_data;
 
-        const std::size_t growth = std::max<std::size_t>(m_capacity / 2, 1);
-        const std::size_t grown =
-            m_capacity <= std::numeric_limits<std::size_t>::max() - growth
-                ? m_capacity + growth
-                : m_capacity;
-        const std::size_t new_capacity = std::max(bytes, grown);
+        const std::size_t growth = std::max<std::size_t>(bytes / 2, 1);
+        if(bytes > std::numeric_limits<std::size_t>::max() - growth)
+        {
+            std::cerr << "CUB redundant workspace overflow: required=" << bytes
+                      << std::endl;
+            std::abort();
+        }
+        const std::size_t new_capacity = bytes + growth;
 
         void* replacement = nullptr;
         GPUIPC_CHECK_CUDA(cudaMalloc(&replacement, new_capacity));

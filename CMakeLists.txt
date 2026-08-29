@@ -17,6 +17,7 @@ endif()
 
 # Initialize project with C++ and CUDA languages
 project(gpu_ipc LANGUAGES CXX CUDA)
+include(CTest)
 
 # =============================================================================
 # Language Standards Configuration
@@ -151,6 +152,26 @@ if(MSVC)
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>
     )
+endif()
+
+if(BUILD_TESTING)
+    add_executable(device_buffer_growth_tests
+        tests/device_buffer_growth_tests.cu)
+    target_include_directories(device_buffer_growth_tests PRIVATE "GPU_IPC/")
+    target_compile_features(device_buffer_growth_tests PRIVATE cxx_std_17 cuda_std_17)
+    target_link_libraries(device_buffer_growth_tests PRIVATE CUDA::cudart)
+    set_target_properties(device_buffer_growth_tests PROPERTIES
+        CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}
+        CUDA_EXTENSIONS OFF)
+    if(MSVC)
+        target_compile_options(device_buffer_growth_tests PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>
+            $<$<COMPILE_LANGUAGE:CXX>:/utf-8>
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>)
+    endif()
+    add_test(NAME device-buffer-required-headroom
+             COMMAND device_buffer_growth_tests)
 endif()
 
 # =============================================================================

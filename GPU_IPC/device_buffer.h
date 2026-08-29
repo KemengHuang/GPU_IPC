@@ -33,16 +33,20 @@ class DeviceBuffer
     std::size_t m_size     = 0;
     std::size_t m_capacity = 0;
 
+    // Every real growth reserves 50% beyond the latest requirement. Basing
+    // headroom on `required` also covers sudden jumps far above old capacity.
     static std::size_t grown_capacity(std::size_t current, std::size_t required)
     {
         if(required <= current)
             return current;
-        const std::size_t growth = std::max<std::size_t>(current / 2, 1);
-        const std::size_t grown =
-            current <= std::numeric_limits<std::size_t>::max() - growth
-                ? current + growth
-                : current;
-        return std::max(required, grown);
+        const std::size_t growth = std::max<std::size_t>(required / 2, 1);
+        if(required > std::numeric_limits<std::size_t>::max() - growth)
+        {
+            std::cerr << "DeviceBuffer redundant-capacity overflow: required="
+                      << required << std::endl;
+            std::abort();
+        }
+        return required + growth;
     }
 
     static T* allocate(std::size_t count)
