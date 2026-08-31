@@ -103,9 +103,15 @@ namespace math
     __host__ __device__
     constexpr T wilkinson_shift(const T a1, const T b1, const T a2) noexcept
     {
-        T d  = (T)0.5 * (a1 - a2);
-        T bs = b1 * b1;
-        T mu = a2 - std::copysign(bs / (std::abs(d) + std::sqrt(d * d + bs)), d);
+        T d     = (T)0.5 * (a1 - a2);
+        T bs    = b1 * b1;
+        T shift = bs / (std::abs(d) + std::sqrt(d * d + bs));
+        // Keep the sign operation in T precision. The standard-library
+        // sign-copy overload is unreliable for float in CUDA host/device code;
+        // Wilkinson uses sign(0) = +1.
+        if(d < (T)0)
+            shift = -shift;
+        T mu = a2 - shift;
         return mu;
     }
 
