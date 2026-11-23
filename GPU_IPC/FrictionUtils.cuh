@@ -7,7 +7,7 @@
 //
 
 #pragma once
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include "gpu_eigen_libs.cuh"
 #include "math.h"
 #define SFCLAMPING_ORDER 1

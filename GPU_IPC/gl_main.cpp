@@ -12,10 +12,9 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include <map>
 #include "GIPC.cuh"
-#include "device_launch_parameters.h"
 #include "mlbvh.cuh"
 #include <stdio.h>
 #include "load_mesh.h"
@@ -89,7 +88,11 @@ void Init_CUDA()
     cudaError_t cudaStatus = cudaSetDevice(0);
     if(cudaStatus != cudaSuccess)
     {
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+        fprintf(stderr, "hipSetDevice failed!  Do you have a HIP-capable AMD GPU installed?");
+#else
         fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+#endif
         exit(0);
     }
 }

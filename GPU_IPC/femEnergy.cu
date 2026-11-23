@@ -826,10 +826,172 @@ __GEIGEN__::Matrix3x6d __computePFDmPX3D_3x6_double(const __GEIGEN__::Vector6& P
     return DsPDminvPx;
 }
 
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+// Symmetric eigendecomposition by cyclic Jacobi rotations, with the interface PDSNK uses
+// from Eigen::SelfAdjointEigenSolver (eigenvalues sorted in increasing order, eigenvectors
+// as columns). Eigen::SelfAdjointEigenSolver's general compute() path -- what the
+// constructor runs, at every size -- reduces through a Householder tridiagonalization whose
+// inner products are the general matrix product kernels, and those are host-only under HIP,
+// so it cannot be instantiated inside a kernel. Jacobi needs no workspace beyond a copy of
+// the matrix and no matrix product, and is backward stable on the small symmetric blocks
+// projected here.
+template <typename MatrixType>
+class SelfAdjointJacobiSolver
+{
+  public:
+    typedef typename MatrixType::Scalar Scalar;
+    enum
+    {
+        Size = MatrixType::RowsAtCompileTime
+    };
+
+    __device__ __host__ explicit SelfAdjointJacobiSolver(const MatrixType& symMtr)
+    {
+        Scalar a[Size][Size];
+        Scalar scale = 0;
+        for(int i = 0; i < Size; i++)
+        {
+            for(int j = 0; j < Size; j++)
+            {
+                a[i][j]       = symMtr(i, j);
+                m_eivec(i, j) = (i == j) ? Scalar(1) : Scalar(0);
+                Scalar mag    = a[i][j] < Scalar(0) ? -a[i][j] : a[i][j];
+                if(mag > scale || mag != mag)
+                {
+                    scale = mag;
+                }
+            }
+        }
+
+        // A NaN or inf coefficient would be normalized into zeros and come back as a finite
+        // projection; return NaN as Eigen's solver does, so the blow-up propagates.
+        if(!(scale <= Eigen::NumTraits<Scalar>::highest()))
+        {
+            m_eivalues.setConstant(Eigen::NumTraits<Scalar>::quiet_NaN());
+            m_eivec.setConstant(Eigen::NumTraits<Scalar>::quiet_NaN());
+            return;
+        }
+
+        // The convergence test below compares sums of squares, so an input whose largest
+        // coefficient exceeds about 1.3e154 makes both sides inf, "inf <= inf" declares
+        // convergence at sweep 0, and a blown-up matrix is returned as a plausible-looking
+        // one instead of propagating. Normalizing keeps the test finite for every finite
+        // input; the eigenvalues are scaled back below. Eigen's solver normalizes too.
+        if(scale > Scalar(0))
+        {
+            for(int i = 0; i < Size; i++)
+            {
+                for(int j = 0; j < Size; j++)
+                {
+                    a[i][j] /= scale;
+                }
+            }
+        }
+
+        const Scalar eps = Eigen::NumTraits<Scalar>::epsilon();
+        for(int sweep = 0; sweep < 32; sweep++)
+        {
+            Scalar off = 0, on = 0;
+            for(int p = 0; p < Size; p++)
+            {
+                on += a[p][p] * a[p][p];
+                for(int q = p + 1; q < Size; q++)
+                {
+                    off += a[p][q] * a[p][q];
+                }
+            }
+            if(off <= eps * eps * (on + off))
+            {
+                break;
+            }
+
+            for(int p = 0; p < Size - 1; p++)
+            {
+                for(int q = p + 1; q < Size; q++)
+                {
+                    if(a[p][q] == Scalar(0))
+                    {
+                        continue;
+                    }
+                    Scalar theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+                    Scalar sign  = (theta >= Scalar(0)) ? Scalar(1) : Scalar(-1);
+                    Scalar t     = sign / (sign * theta + sqrt(theta * theta + Scalar(1)));
+                    Scalar c     = Scalar(1) / sqrt(t * t + Scalar(1));
+                    Scalar s     = t * c;
+
+                    for(int k = 0; k < Size; k++)
+                    {
+                        Scalar rp = a[p][k], rq = a[q][k];
+                        a[p][k] = c * rp - s * rq;
+                        a[q][k] = s * rp + c * rq;
+                    }
+                    for(int k = 0; k < Size; k++)
+                    {
+                        Scalar cp = a[k][p], cq = a[k][q];
+                        a[k][p] = c * cp - s * cq;
+                        a[k][q] = s * cp + c * cq;
+                    }
+                    for(int k = 0; k < Size; k++)
+                    {
+                        Scalar vp = m_eivec(k, p), vq = m_eivec(k, q);
+                        m_eivec(k, p) = c * vp - s * vq;
+                        m_eivec(k, q) = s * vp + c * vq;
+                    }
+                }
+            }
+        }
+
+        for(int i = 0; i < Size; i++)
+        {
+            m_eivalues(i) = a[i][i] * scale;
+        }
+
+        for(int i = 0; i < Size - 1; i++)
+        {
+            int k = i;
+            for(int j = i + 1; j < Size; j++)
+            {
+                if(m_eivalues(j) < m_eivalues(k))
+                {
+                    k = j;
+                }
+            }
+            if(k != i)
+            {
+                Scalar tmp    = m_eivalues(i);
+                m_eivalues(i) = m_eivalues(k);
+                m_eivalues(k) = tmp;
+                for(int r = 0; r < Size; r++)
+                {
+                    tmp           = m_eivec(r, i);
+                    m_eivec(r, i) = m_eivec(r, k);
+                    m_eivec(r, k) = tmp;
+                }
+            }
+        }
+    }
+
+    __device__ __host__ const Eigen::Matrix<Scalar, Size, 1>& eigenvalues() const
+    {
+        return m_eivalues;
+    }
+
+    __device__ __host__ const MatrixType& eigenvectors() const { return m_eivec; }
+
+  private:
+    Eigen::Matrix<Scalar, Size, 1> m_eivalues;
+    MatrixType                     m_eivec;
+};
+#endif
+
 template <typename Scalar, int size>
 __device__ void PDSNK(Eigen::Matrix<Scalar, size, size>& symMtr)
 {
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+    SelfAdjointJacobiSolver<Eigen::Matrix<Scalar, size, size>> eigenSolver(symMtr);
+#else
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix<Scalar, size, size>> eigenSolver(symMtr);
+#endif
     if(eigenSolver.eigenvalues()[0] >= 0.0)
     {
         return;

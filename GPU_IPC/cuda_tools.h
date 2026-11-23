@@ -10,7 +10,7 @@
 #ifndef _CUDA_TOOLS_H
 #define _CUDA_TOOLS_H
 
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include <cstdlib>
 #include <iostream>
 

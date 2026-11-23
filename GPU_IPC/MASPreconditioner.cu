@@ -9,14 +9,17 @@
 #include "MASPreconditioner.cuh"
 #include "cuda_cub_wrappers.h"
 #include "cuda_tools.h"
-#include "device_launch_parameters.h"
 
 #include <vector>
 #include <bitset>
 
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include <hip/hip_cooperative_groups.h>
+#else
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 #include "cooperative_groups.h"
+#endif
 #include "device_utils.h"
 using namespace cooperative_groups;
 //#include "Eigen/Eigen"
@@ -98,7 +101,7 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
         prefixSum[localWarpId] = 0;
     }
     cacheMask[threadIdx.x] = connectMsk;
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
     unsigned int visited   = (1U << laneId);
     while(connectMsk != 0xffffffffU)
     {
@@ -122,7 +125,7 @@ __global__ void _preparePrefixSumL0(int* _prefixOriginal, unsigned int* _fineCon
         gipc::ATOMIC_ADD(prefixSum + localWarpId, 1);
     }
 
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     if(laneId == 0)
     {
@@ -155,7 +158,7 @@ __global__ void _buildLevel1(int2*               _levelSize,
     {
         electedMask[localWarpId] = 0;
     }
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
     if(idx == vertNum - 1)
     {
         _levelSize[1].x = _prefixSumOriginal[warpId] + _prefixOriginal[warpId];
@@ -170,7 +173,7 @@ __global__ void _buildLevel1(int2*               _levelSize,
     {
         atomicOr(electedMask + localWarpId, (1U << laneId));
     }
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     //unsigned int lanePrefix2 = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     //lanePrefix2 += _prefixSumOriginal[warpId];
@@ -180,7 +183,7 @@ __global__ void _buildLevel1(int2*               _levelSize,
 
     lanePrefix[threadIdx.x] = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     lanePrefix[threadIdx.x] += _prefixSumOriginal[warpId];
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     unsigned int elected_lane = __ffs(connMsk) - 1;
     unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //gipc::WARP_SHFL(lanePrefix, elected_lane);
@@ -236,7 +239,7 @@ __global__ void _buildConnectMaskLx(const unsigned int* _neighborStart,
 
     __shared__ int cacheMsk[DEFAULT_BLOCKSIZE];
     cacheMsk[threadIdx.x] = 0;
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     unsigned int cacheIndex;
     if(__popc(prefixMsk) == BANKSIZE)
@@ -256,7 +259,7 @@ __global__ void _buildConnectMaskLx(const unsigned int* _neighborStart,
         }
         cacheIndex = localWarpId * BANKSIZE + electedLane;
     }
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
     connMsk = cacheMsk[cacheIndex];
 
     unsigned int electedPrefix = __popc(prefixMsk & _LanemaskLt(laneId));
@@ -292,7 +295,7 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
 
     __shared__ unsigned int cachedMsk[DEFAULT_BLOCKSIZE];
     cachedMsk[threadIdx.x] = connMsk;
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
     unsigned int visited   = (1U << laneId);
 
     while(true)
@@ -318,7 +321,7 @@ __global__ void _nextLevelCluster(unsigned int* _nextConnectedMsk, unsigned int*
         gipc::ATOMIC_ADD(prefixSum + localWarpId, 1);
     }
 
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     if(laneId == 0)
         _nextPrefix[warpId] = prefixSum[localWarpId];
@@ -350,7 +353,7 @@ __global__ void _prefixSumLx(int2*         _levelSize,
     {
         electedMask[localWarpId] = 0;
     }
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     if(idx == number - 1)
     {
@@ -366,11 +369,11 @@ __global__ void _prefixSumLx(int2*         _levelSize,
     {
         atomicOr(electedMask + localWarpId, (1U << laneId));
     }
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     lanePrefix[threadIdx.x] = __popc(electedMask[localWarpId] & _LanemaskLt(laneId));
     lanePrefix[threadIdx.x] += _nextPrefixSum[warpId];
-    __syncwarp(active_mask);
+    gipc::SYNC_WARP(active_mask);
 
     unsigned int elected_lane = __ffs(connMsk) - 1;
     unsigned int theLanePrefix = lanePrefix[elected_lane + BANKSIZE * localWarpId];  //gipc::WARP_SHFL(lanePrefix, elected_lane);
@@ -873,13 +876,13 @@ __global__ void __buildMultiLevelR_optimized(const double3* _R,
         c_sumResidual[threadIdx.x]                         = 0;
         c_sumResidual[threadIdx.x + DEFAULT_BLOCKSIZE]     = 0;
         c_sumResidual[threadIdx.x + 2 * DEFAULT_BLOCKSIZE] = 0;
-        __syncwarp(sparse_cluster_mask);
+        gipc::SYNC_WARP(sparse_cluster_mask);
         gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane, r.x);
         gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane + DEFAULT_BLOCKSIZE,
                   r.y);
         gipc::ATOMIC_ADD(c_sumResidual + localWarpId * BANKSIZE + elected_lane + 2 * DEFAULT_BLOCKSIZE,
                   r.z);
-        __syncwarp(sparse_cluster_mask);
+        gipc::SYNC_WARP(sparse_cluster_mask);
 
         unsigned int electedPrefix = __popc(connectMsk & _LanemaskLt(laneId));
         if(electedPrefix == 0)

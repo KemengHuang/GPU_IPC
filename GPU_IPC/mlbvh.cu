@@ -16,7 +16,12 @@
 #include<fstream>
 #include "gpu_eigen_libs.cuh"
 #include "device_utils.h"
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include <hipcub/block/block_reduce.hpp>
+namespace cub = hipcub;
+#else
 #include <cub/block/block_reduce.cuh>
+#endif
 
 __global__ void fill_bvh_indices(uint32_t* indices, int number)
 {
@@ -1366,7 +1371,7 @@ void calcLeafBvs(const double3* _vertexes, const element_type* _faces, AABB* _bv
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
-    _calcLeafBvs << <blockNum, threadNum >> > (_vertexes, _faces, _bvs + numbers - 1, faceNum, type);
+    _calcLeafBvs <<<blockNum, threadNum >>> (_vertexes, _faces, _bvs + numbers - 1, faceNum, type);
 }
 
 template <class element_type>
@@ -1376,7 +1381,7 @@ void calcLeafBvs_fullCCD(const double3* _vertexes, const double3* _moveDir, cons
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
-    _calcLeafBvs_ccd << <blockNum, threadNum >> > (_vertexes, _moveDir, alpha, _faces, _bvs + numbers - 1, faceNum, type);
+    _calcLeafBvs_ccd <<<blockNum, threadNum >>> (_vertexes, _moveDir, alpha, _faces, _bvs + numbers - 1, faceNum, type);
 }
 
 void calcMChash(uint64_t* _MChash, AABB* _bvs, int number) {
@@ -1385,7 +1390,7 @@ void calcMChash(uint64_t* _MChash, AABB* _bvs, int number) {
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
-    _calcMChash << <blockNum, threadNum >> > (_MChash, _bvs, number);
+    _calcMChash <<<blockNum, threadNum >>> (_MChash, _bvs, number);
 }
 
 void calcLeafNodes(Node* _nodes, const uint32_t* _indices, int number) {
@@ -1394,7 +1399,7 @@ void calcLeafNodes(Node* _nodes, const uint32_t* _indices, int number) {
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
-    _calcLeafNodes << <blockNum, threadNum >> > (_nodes, _indices, number);
+    _calcLeafNodes <<<blockNum, threadNum >>> (_nodes, _indices, number);
 }
 
 void calcInternalNodes(Node* _nodes, const uint64_t* _MChash, int number) {
@@ -1403,7 +1408,7 @@ void calcInternalNodes(Node* _nodes, const uint64_t* _MChash, int number) {
         return;
     const unsigned int threadNum = default_threads;
     int blockNum = (numbers + threadNum - 1) / threadNum;
-    _calcInternalNodes << <blockNum, threadNum >> > (_nodes, _MChash, number);
+    _calcInternalNodes <<<blockNum, threadNum >>> (_nodes, _MChash, number);
 }
 
 void calcInternalAABB(const Node* _nodes, AABB* _bvs, uint32_t* flags, int number) {
@@ -1415,7 +1420,7 @@ void calcInternalAABB(const Node* _nodes, AABB* _bvs, uint32_t* flags, int numbe
     //uint32_t* flags;
     //CUDA_SAFE_CALL(cudaMalloc((void**)&flags, (numbers-1) * sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMemset(flags, 0xFFFFFFFF, sizeof(uint32_t) * (numbers - 1)));
-    _calcInternalAABB << <blockNum, threadNum >> > (_nodes, _bvs, flags, numbers);
+    _calcInternalAABB <<<blockNum, threadNum >>> (_nodes, _bvs, flags, numbers);
     //CUDA_SAFE_CALL(cudaFree(flags));
 
 }
@@ -1432,7 +1437,7 @@ void sortBvs(const uint32_t* _indices, AABB* _bvs, AABB* _temp_bvs, int number) 
                               _bvs + number - 1,
                               sizeof(AABB) * static_cast<size_t>(number),
                               cudaMemcpyDeviceToDevice));
-    _sortBvs << <blockNum, threadNum >> > (_indices, _bvs + number - 1, _temp_bvs, number);
+    _sortBvs <<<blockNum, threadNum >>> (_indices, _bvs + number - 1, _temp_bvs, number);
     //CUDA_SAFE_CALL(cudaFree(_temp_bvs));
 }
 
@@ -1444,7 +1449,7 @@ void selfQuery_ee(const int* _btype, const double3* _vertexes, const double3* _r
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
     
-    _selfQuery_ee << <blockNum, threadNum >> > (_btype, _vertexes, _rest_vertexes, _edges, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, pair_capacity, numbers);
+    _selfQuery_ee <<<blockNum, threadNum >>> (_btype, _vertexes, _rest_vertexes, _edges, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, pair_capacity, numbers);
 }
 
 void fullCCDselfQuery_ee(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint2* _edges, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, uint32_t pair_capacity, int number) {
@@ -1454,7 +1459,7 @@ void fullCCDselfQuery_ee(const int* _btype, const double3* _vertexes, const doub
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
-    _selfQuery_ee_ccd << <blockNum, threadNum >> > (_btype, _vertexes, moveDir, alpha, _edges, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, pair_capacity, numbers);
+    _selfQuery_ee_ccd <<<blockNum, threadNum >>> (_btype, _vertexes, moveDir, alpha, _edges, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, pair_capacity, numbers);
 }
 
 void selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _collisonPairs, int4* _ccd_collisonPairs, uint32_t* _cpNum, int* MatIndex, double dHat, uint32_t pair_capacity, int number) {
@@ -1464,7 +1469,7 @@ void selfQuery_vf(const int* _btype, const double3* _vertexes, const uint3* _fac
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
-    _selfQuery_vf << <blockNum, threadNum >> > (_btype, _vertexes, _faces, _surfVerts, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, pair_capacity, numbers);
+    _selfQuery_vf <<<blockNum, threadNum >>> (_btype, _vertexes, _faces, _surfVerts, _bvs, _nodes, _collisonPairs, _ccd_collisonPairs, _cpNum, MatIndex, dHat, pair_capacity, numbers);
 }
 
 void fullCCDselfQuery_vf(const int* _btype, const double3* _vertexes, const double3* moveDir, const double& alpha, const uint3* _faces, const uint32_t* _surfVerts, const AABB* _bvs, const Node* _nodes, int4* _ccd_collisonPairs, uint32_t* _cpNum, double dHat, uint32_t pair_capacity, int number) {
@@ -1474,7 +1479,7 @@ void fullCCDselfQuery_vf(const int* _btype, const double3* _vertexes, const doub
     const unsigned int threadNum = 256;
     int blockNum = (numbers + threadNum - 1) / threadNum;
 
-    _selfQuery_vf_ccd << <blockNum, threadNum >> > (_btype, _vertexes, moveDir, alpha, _faces, _surfVerts, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, pair_capacity, numbers);
+    _selfQuery_vf_ccd <<<blockNum, threadNum >>> (_btype, _vertexes, moveDir, alpha, _faces, _surfVerts, _bvs, _nodes, _ccd_collisonPairs, _cpNum, dHat, pair_capacity, numbers);
 }
 
 void lbvh::FREE_DEVICE_MEM() {

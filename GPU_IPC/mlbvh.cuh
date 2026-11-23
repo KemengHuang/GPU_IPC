@@ -10,9 +10,8 @@
 #ifndef _MLBVH_CUH_
 #define _MLBVH_CUH_
 #include <cstdint>
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include "device_buffer.h"
-#include "device_launch_parameters.h"
 
 struct AABB {
 public:

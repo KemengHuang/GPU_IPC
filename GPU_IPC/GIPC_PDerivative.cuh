@@ -9,7 +9,7 @@
 #pragma once
 #ifndef _GIPC_PDERIVATIVE_CUH_
 #define _GIPC_PDERIVATIVE_CUH_
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include "math.h"
 #include "gpu_eigen_libs.cuh"
 

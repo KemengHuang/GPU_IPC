@@ -10,8 +10,7 @@
 #ifndef  __FEM_ENERGY_CUH__
 #define __FEM_ENERGY_CUH__
 #include <cstdint>
-#include <cuda_runtime.h>
-#include "device_launch_parameters.h"
+#include "cuda_to_hip.h"
 #include "gpu_eigen_libs.cuh"
 
 __device__ __host__

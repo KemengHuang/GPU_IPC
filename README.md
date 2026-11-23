@@ -17,13 +17,14 @@ enabling valuable comparisons to be made.
 
 ## Requirements
 
-- **Hardware:** NVIDIA GPU (CUDA-capable)
+- **Hardware:** NVIDIA GPU (CUDA-capable), or AMD GPU through ROCm
 - **Platforms:** Windows, Linux
-- **Toolchain:** CMake ≥ 3.18, a C++17 compiler, CUDA Toolkit
+- **Toolchain:** CMake ≥ 3.18, a C++17 compiler, CUDA Toolkit or ROCm
 
 | Name     | Version | Usage             | Import         |
 | -------- | ------- | ----------------- | -------------- |
-| CUDA     | ≥ 11.0  | GPU programming   | system install |
+| CUDA     | ≥ 11.0  | GPU programming on NVIDIA | system install |
+| ROCm     | ≥ 7.0   | GPU programming on AMD    | system install |
 | Eigen3   | 3.4.0   | matrix calculation| package        |
 | freeglut | 3.4.0   | visualization     | package        |
 | GLEW     | 2.2.0   | visualization     | package        |
@@ -36,6 +37,13 @@ enabling valuable comparisons to be made.
 sudo apt install libglew-dev freeglut3-dev libeigen3-dev
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+
+Only one of CUDA and ROCm is needed. To build for AMD GPUs, configure with `USE_HIP` and name the target architecture (`gfx90a`, `gfx942`, `gfx1100`, ... -- `rocminfo | grep gfx` reports what a machine has); the sources are the same.
+
+```bash
+cmake -S . -B build -DUSE_HIP=ON -DCMAKE_HIP_ARCHITECTURES=gfx1100 -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
