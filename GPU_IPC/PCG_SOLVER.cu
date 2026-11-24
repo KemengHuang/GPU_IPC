@@ -20,7 +20,6 @@
 //
 
 #include "PCG_SOLVER.cuh"
-#include "device_launch_parameters.h"
 #include "gpu_eigen_libs.cuh"
 #include "cuda_tools.h"
 #include "cuda_cub_wrappers.h"
@@ -52,8 +51,8 @@ __device__ __forceinline__ void __PCG_blockReducePartial(double temp, double* te
     else {
         warpNum = ((blockDim.x) >> 5);
     }
-    const int warp_begin = idof + warpId * warpSize;
-    const int valid_lanes = min(warpSize, max(numbers - warp_begin, 0));
+    const int warp_begin = idof + warpId * 32;
+    const int valid_lanes = min(32, max(numbers - warp_begin, 0));
     const unsigned int warp_mask =
         gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     for (int i = 1; i < 32; i = (i << 1)) {
@@ -248,7 +247,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         const int valid_lanes = min(32, numbers4 - (idx - lane));
         const unsigned int active_mask =
             gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
-        const unsigned int row_mask = __match_any_sync(active_mask, Hid * 12 + MRid);
+        const unsigned int row_mask = gipc::WARP_MATCH_ANY(Hid * 12 + MRid, active_mask);
         for (int iter = 1; iter < 12; iter <<= 1) {
             const double tmp = gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
             const int source_lane = lane + iter;
@@ -274,7 +273,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         const int valid_lanes = min(32, numbers3 - (idx - lane));
         const unsigned int active_mask =
             gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
-        const unsigned int row_mask = __match_any_sync(active_mask, Hid * 9 + MRid);
+        const unsigned int row_mask = gipc::WARP_MATCH_ANY(Hid * 9 + MRid, active_mask);
         for (int iter = 1; iter < 9; iter <<= 1) {
             const double tmp = gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
             const int source_lane = lane + iter;
@@ -300,7 +299,7 @@ __global__ void __PCG_Solve_AXALL_b2(const __GEIGEN__::Matrix12x12d* Hessians12,
         const int valid_lanes = min(32, numbers2 - (idx - lane));
         const unsigned int active_mask =
             gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
-        const unsigned int row_mask = __match_any_sync(active_mask, Hid * 6 + MRid);
+        const unsigned int row_mask = gipc::WARP_MATCH_ANY(Hid * 6 + MRid, active_mask);
         for (int iter = 1; iter < 6; iter <<= 1) {
             const double tmp = gipc::WARP_SHFL_DOWN(rdata, iter, active_mask);
             const int source_lane = lane + iter;

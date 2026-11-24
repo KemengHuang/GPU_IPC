@@ -9,7 +9,7 @@
 #pragma once
 #ifndef _GPU_EIGEN_LIB_CUH_
 #define _GPU_EIGEN_LIB_CUH_
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include <math.h>
 #include "eigen_data.h"
 #include "QRSVD.hpp"

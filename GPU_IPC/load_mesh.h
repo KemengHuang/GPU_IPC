@@ -12,7 +12,7 @@
 //#include "Eigen/Eigen"
 //#include "mIPC.h"
 #include <vector>
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include <string>
 #include <sstream>
 #include "eigen_data.h"

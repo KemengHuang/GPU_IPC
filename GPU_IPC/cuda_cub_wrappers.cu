@@ -2,9 +2,16 @@
 
 #include "device_buffer.h"
 
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include <hipcub/device/device_radix_sort.hpp>
+#include <hipcub/device/device_reduce.hpp>
+#include <hipcub/device/device_scan.hpp>
+namespace cub = hipcub;
+#else
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_reduce.cuh>
 #include <cub/device/device_scan.cuh>
+#endif
 
 #include <algorithm>
 #include <cstddef>

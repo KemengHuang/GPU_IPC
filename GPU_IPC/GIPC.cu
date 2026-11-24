@@ -134,8 +134,8 @@ __device__ __forceinline__ void __blockReduce(double temp, double* tep, double* 
     {
         warpNum = ((blockDim.x) >> 5);
     }
-    const int warp_begin = idof + warpId * warpSize;
-    const int valid_lanes = min(warpSize, max(number - warp_begin, 0));
+    const int warp_begin = idof + warpId * 32;
+    const int valid_lanes = min(32, max(number - warp_begin, 0));
     const unsigned int warp_mask =
         gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     for(int i = 1; i < 32; i = (i << 1))
@@ -203,8 +203,8 @@ __device__ __forceinline__ void __blockReduceMax2(double2 temp, double2* sdata, 
     {
         warpNum = ((blockDim.x) >> 5);
     }
-    const int warp_begin = idof + warpId * warpSize;
-    const int valid_lanes = min(warpSize, max(number - warp_begin, 0));
+    const int warp_begin = idof + warpId * 32;
+    const int valid_lanes = min(32, max(number - warp_begin, 0));
     const unsigned int warp_mask =
         gipc::WARP_MASK_FROM_COUNT(static_cast<unsigned int>(valid_lanes));
     for(int i = 1; i < 32; i = (i << 1))

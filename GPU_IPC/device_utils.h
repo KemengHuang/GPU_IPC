@@ -1,4 +1,4 @@
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 
 namespace gipc
 {

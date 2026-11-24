@@ -7,7 +7,7 @@
 //
 
 #pragma once
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 
 __device__
 double point_triangle_ccd(

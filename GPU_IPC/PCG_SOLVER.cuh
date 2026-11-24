@@ -15,7 +15,7 @@
 #pragma once
 #ifndef _PCG_SOLVER_CUH_
 #define _PCG_SOLVER_CUH_
-#include <cuda_runtime.h>
+#include "cuda_to_hip.h"
 #include "device_fem_data.cuh"
 #include "device_buffer.h"
 #include <cstdint>
